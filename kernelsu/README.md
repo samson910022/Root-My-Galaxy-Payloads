@@ -11,7 +11,8 @@ They are not interchangeable between KMIs.
 > `Kbuild` fallback `KSU_VERSION ?= 32525`) until the v3.3.0 rebuilds are
 > hardware-verified and republished. Version codes `32525` / `32525-2` quoted
 > below are v3.2.5 historical device measurements; v3.3.0 (`32601`) is pending
-> verification.
+> verification (e1q v3.3.0 build exists but is gated, not yet published — see
+> `REBUILD-e1q-v3.3.0.md`).
 
 ## Versioned artifacts
 
@@ -33,8 +34,8 @@ They are not interchangeable between KMIs.
 | `ksud-e1s-S921NKSSFDZF3-kdp` | Same exact S921N build | `android14-6.1` | Device-tested late-load binary embedding the S921N no-patch-text module |
 | `android14-6.1_kernelsu-e1s-S921BXXSFDZE1-kdp.ko` | `SM-S921B`, `S921BXXSFDZE1` | `android14-6.1` | Exact E1S no-patch-text module with target `vermagic`, audited for manual relocation |
 | `ksud-e1s-S921BXXSFDZE1-kdp` | Same exact E1S build | `android14-6.1` | Device-tested late-load binary embedding the E1S no-patch-text module |
-| `android14-6.1_kernelsu-e1q-S9210ZHS6DZG1-kdp.ko` | `SM-S9210`, `S9210ZHS6DZG1` | `android14-6.1` | Exact E1Q no-patch-text module with target `vermagic`, audited for manual relocation; v3.3.0 rebuild (static-audited, hardware validation pending; v3.2.5 pair was device-tested) |
-| `ksud-e1q-S9210ZHS6DZG1-kdp` | Same exact E1Q build | `android14-6.1` | Late-load binary embedding the E1Q v3.3.0 module (static-audited, hardware validation pending) |
+| `android14-6.1_kernelsu-e1q-S9210ZHS6DZG1-kdp.ko` | `SM-S9210`, `S9210ZHS6DZG1` | `android14-6.1` | Exact E1Q no-patch-text module with target `vermagic`, audited for manual relocation; on-disk remains v3.2.5 device-tested pair, v3.3.0 rebuild built (static-audited, NOT yet published, hardware validation pending — see `REBUILD-e1q-v3.3.0.md`) |
+| `ksud-e1q-S9210ZHS6DZG1-kdp` | Same exact E1Q build | `android14-6.1` | Late-load binary embedding the E1Q module; on-disk remains v3.2.5 device-tested (v3.3.0 built, static-audited, NOT yet published, hardware validation pending) |
 | `android14-6.1_kernelsu-samsung-kdp.ko` | `SM-S721N` `S721NKSSCDZF3`; `SM-S921B` `S921BXXSFDZF2` | `android14-6.1` | Standalone Samsung KDP/RKP/DEFEX module with target `vermagic` |
 | `ksud-samsung-android14-6.1-kdp` | Same verified 6.1 targets | `android14-6.1` | Late-load binary embedding the 6.1 module |
 | `android12-5.10_kernelsu-samsung-kdp.ko` | `SM-A155N` `A155NKSS6BYH1` | `android12-5.10` | Standalone Samsung KDP/RKP/DEFEX module built against the exact A15 kernel |
@@ -250,10 +251,11 @@ against its pinned DDK and exact `UTS_RELEASE`.
 > workaround (pointing at the upstream-blessed `KernelSU2/ksu_props`
 > successor); vendor or patch before building clean.
 
-Rebuild status on this branch: except e1q-S9210ZHS6DZG1 (rebuilt for v3.3.0,
-static-audited, hardware validation pending — see `REBUILD-e1q-v3.3.0.md`),
-none of the published `.ko` / `ksud-*`
-binaries above has been rebuilt yet — all others remain v3.2.5 artifacts. Rebuilding
+Rebuild status on this branch: e1q-S9210ZHS6DZG1 v3.3.0 built and
+static-audited but NOT yet published (on-disk pair remains v3.2.5 device-tested;
+hardware validation pending — see `REBUILD-e1q-v3.3.0.md`),
+all published `.ko` / `ksud-*`
+binaries in this directory remain v3.2.5 artifacts. Rebuilding
 is per target, in this order: exact-`vermagic` module → `check_symbol`
 against the recovered target `vmlinux.elf` →
 `audit_module_against_target.py --manual-relocation` (zero missing, zero
