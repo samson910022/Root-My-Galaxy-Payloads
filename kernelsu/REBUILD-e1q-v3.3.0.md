@@ -90,7 +90,7 @@ Done 2026-10-01, on the unstripped PhaseB module:
   module (202/0/0/70/empty `__versions`).
 - `readelf -SW`: `__versions` size 0; `.symtab`/`.strtab` present;
   zero `UND stop_machine` imports.
-- `llvm-strip -d` (NDK r29) → published module
+- `llvm-strip -d` (NDK r29) → stripped build output
   `android14-6.1_kernelsu-e1q-S9210ZHS6DZG1-kdp.ko`, 406160 bytes
   (v3.2.5 reference: 398336 bytes; growth consistent with the added
   execveat fallback), SHA-256
@@ -98,9 +98,9 @@ Done 2026-10-01, on the unstripped PhaseB module:
 - Post-strip re-verified: exact `vermagic`, `__versions` size 0,
   `.symtab`/`.strtab` retained, zero `UND stop_machine`.
 
-## PhaseD — ksud embedding + repo publication
+## PhaseD — ksud embedding + (gated) repo publication
 
-Done 2026-10-01.
+Done 2026-10-01 for build + static audit; repo publication gated on HW validation (not yet published).
 
 - Dependency note (blocking issue found and resolved): upstream
   `prop-rs-android` source `https://github.com/Kernel-SU/ksu_props` at the
@@ -130,17 +130,24 @@ Done 2026-10-01.
   the output, not the embedded module's identity; only extraction or
   hardware late-load proves that. Final hardware late-load remains the
   ground-truth check.
-- Published pair:
-  `kernelsu/android14-6.1_kernelsu-e1q-S9210ZHS6DZG1-kdp.ko` (406160 bytes,
+- Built pair (pending HW, NOT yet published to repo):
+  `android14-6.1_kernelsu-e1q-S9210ZHS6DZG1-kdp.ko` (406160 bytes,
   SHA-256 `d64647a118b91833ad0580076d06c946f1b5e4f34a52ae8a13aeeeebeb646687`) +
-  `kernelsu/ksud-e1q-S9210ZHS6DZG1-kdp` (4995304 bytes, SHA-256
-  `8874894560e46dd3ab711386f07c3d89635bdaae0e02a806878555bdbdc15049`).
-- Repo updates: `docs/SM-S9210-S9210ZHS6DZG1.md` version split (v3.3.0 pending HW /
-  v3.2.5 device-tested history); `kernelsu/README.md` e1q table rows.
+  `ksud-e1q-S9210ZHS6DZG1-kdp` (4995304 bytes, SHA-256
+  `8874894560e46dd3ab711386f07c3d89635bdaae0e02a806878555bdbdc15049`),
+  retained in the outside-repo build workdir (`/mnt/240G_SSD/e1q-v3.3.0-build/`).
+- Repo state on this branch (gated): `kernelsu/*.ko` + `ksud-e1q-...` remain the
+  v3.2.5 device-tested pair (398336 bytes /
+  `1b7847944dfb3f4491d2fe258c85f3292b762a5536180850fa157852b9cae79f`; 4895088
+  bytes / `67b49cadfbbc518ac1fca3f7e514782110e896103882e7caa5cccaa1572ee542`).
+  `docs/SM-S9210-S9210ZHS6DZG1.md` version split (v3.3.0 pending HW /
+  v3.2.5 device-tested history); `kernelsu/README.md` e1q table rows describe the
+  pending build, not the on-disk binaries.
   `support/targets-v3.json` e1q `kernelsu.size` stays at `4895088`
   (device-tested v3.2.5 pair) — the bump to `4995304` is gated on hardware
   validation (`Working <LKM>` version `32601`, no mismatch banner) and
-  must ship together with the verified binaries.
+  must ship atomically together with the verified binaries (`.ko` + `ksud` +
+  `json.size` in one commit).
 - Remaining: hardware late-load on SM-S9210 (expect Manager
   `Working <LKM>` version `32601`, no mismatch banner), plus resetprop
   regression (`set/get/delete/wait`, `ro.*` ≥93B long values,
