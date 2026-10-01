@@ -55,7 +55,27 @@ before touching hardware.
 
 ## PhaseB — DDK module build
 
-(Pending.)
+Done 2026-10-01. Container
+`ghcr.io/ylarod/ddk-min:android14-6.1-20260313`, single run:
+
+- `sed 6.1.166-dirty → 6.1.145-android14-11-33419968-abS9210ZHS6DZG1`
+  in `$KDIR/include/generated/utsrelease.h` +
+  `$KDIR/include/config/kernel.release` (same container invocation as the
+  build; the DDK image is immutable across runs).
+- Mount note: mount the KernelSU root at `/workspace` with
+  `-w /workspace/kernel` (mounting at `/workspace/kernel` breaks the
+  kernel-subdir `Makefile` lookup).
+- `make clean`; then `CONFIG_KSU=m CONFIG_KSU_SAMSUNG_KDP=y
+  CONFIG_KSU_SAMSUNG_RKP=y CONFIG_KSU_SAMSUNG_DEFEX=y
+  CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y CC=clang make -j$(nproc)` → exit 0
+  (`LD [M]`, `BTF [M]`; the build's own `check_symbol` against the DDK
+  vmlinux also ran).
+- `modinfo ./kernelsu.ko` vermagic:
+  `6.1.145-android14-11-33419968-abS9210ZHS6DZG1 SMP preempt mod_unload
+  modversions aarch64` — exact target match.
+- Unstripped output preserved at
+  `/mnt/240G_SSD/e1q-v3.3.0-build/e1q-v3.3.0-unstripped.ko`
+  (5,851,848 bytes, BTF/debug included; stripping is PhaseC).
 
 ## PhaseC — static audit
 
