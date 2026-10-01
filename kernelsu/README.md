@@ -33,6 +33,8 @@ They are not interchangeable between KMIs.
 | `ksud-e1s-S921NKSSFDZF3-kdp` | Same exact S921N build | `android14-6.1` | Device-tested late-load binary embedding the S921N no-patch-text module |
 | `android14-6.1_kernelsu-e1s-S921BXXSFDZE1-kdp.ko` | `SM-S921B`, `S921BXXSFDZE1` | `android14-6.1` | Exact E1S no-patch-text module with target `vermagic`, audited for manual relocation |
 | `ksud-e1s-S921BXXSFDZE1-kdp` | Same exact E1S build | `android14-6.1` | Device-tested late-load binary embedding the E1S no-patch-text module |
+| `android14-6.1_kernelsu-e1q-S9210ZHS6DZG1-kdp.ko` | `SM-S9210`, `S9210ZHS6DZG1` | `android14-6.1` | Exact E1Q no-patch-text module with target `vermagic`, audited for manual relocation; v3.3.0 rebuild (static-audited, hardware validation pending; v3.2.5 pair was device-tested) |
+| `ksud-e1q-S9210ZHS6DZG1-kdp` | Same exact E1Q build | `android14-6.1` | Late-load binary embedding the E1Q v3.3.0 module |
 | `android14-6.1_kernelsu-samsung-kdp.ko` | `SM-S721N` `S721NKSSCDZF3`; `SM-S921B` `S921BXXSFDZF2` | `android14-6.1` | Standalone Samsung KDP/RKP/DEFEX module with target `vermagic` |
 | `ksud-samsung-android14-6.1-kdp` | Same verified 6.1 targets | `android14-6.1` | Late-load binary embedding the 6.1 module |
 | `android12-5.10_kernelsu-samsung-kdp.ko` | `SM-A155N` `A155NKSS6BYH1` | `android12-5.10` | Standalone Samsung KDP/RKP/DEFEX module built against the exact A15 kernel |
@@ -235,6 +237,24 @@ git apply KernelSU-v3.3.0-dm3q-5.15-build-fix.patch
 > `git apply KernelSU-v3.2.5-samsung-kdp-rkp-defex.patch` (plus
 > `KernelSU-v3.2.5-dm1q-android13-5.15-build-fix.patch` /
 > `KernelSU-v3.2.5-dm2q-fzg1.patch` where applicable).
+
+Upstream v3.3.0 references DDK `20260828` (adds android17-6.18 and x64 LKM
+builds). The pinned DDK below is unchanged: keep building each target
+against its pinned DDK and exact `UTS_RELEASE`.
+
+Rebuild status on this branch: except e1q-S9210ZHS6DZG1 (rebuilt for v3.3.0,
+static-audited, hardware validation pending — see `REBUILD-e1q-v3.3.0.md`),
+none of the published `.ko` / `ksud-*`
+binaries above has been rebuilt yet — all others remain v3.2.5 artifacts. Rebuilding
+is per target, in this order: exact-`vermagic` module → `check_symbol`
+against the recovered target `vmlinux.elf` →
+`audit_module_against_target.py --manual-relocation` (zero missing, zero
+`__versions`, zero CRC mismatches, no `stop_machine` import) → embed into
+`ksud` and publish the `.ko` / `ksud-*` pair together → hardware late-load
+(`u:r:ksu:s0`, Manager `Working <LKM>` with version `32601`, no mismatch
+banner). `support/targets-v3.json` needs no schema change; only replaced
+artifacts' `size` fields get updated on rebuild. `targets-v2.json` stays
+frozen.
 
 For the Samsung 6.1 module, use DDK image
 `ghcr.io/ylarod/ddk-min:android14-6.1-20260313` and set:

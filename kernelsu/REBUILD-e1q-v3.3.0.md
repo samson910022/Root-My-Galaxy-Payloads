@@ -100,4 +100,45 @@ Done 2026-10-01, on the unstripped PhaseB module:
 
 ## PhaseD — ksud embedding + repo publication
 
-(Pending.)
+Done 2026-10-01.
+
+- Dependency note (blocking issue found and resolved): upstream
+  `prop-rs-android` source `https://github.com/Kernel-SU/ksu_props` at the
+  v3.3.0-pinned rev `6f5723105d8d4cacad31d83d343defbf032c7b33` is gone
+  (repo 404; the old org is suspended, see upstream #3723). Upstream main
+  already migrated to `https://github.com/KernelSU2/ksu_props` (#3723, rev
+  `ddb6ee7294467f7f25bad2118e9e24eee104144b`). The v3.3.0 ksud call sites
+  (`rp.set/load_props/rebuild/rebuild_all` with `?`-then-`;`, discarding
+  the newer `bool need_rebuild` returns) compile unchanged against it.
+  Build-workspace-only `[patch."https://github.com/Kernel-SU/ksu_props"]`
+  override added to the KernelSU checkout's `Cargo.toml` (NOT committed to
+  this repo); the deviation is recorded here. Note: `adb_client` /
+  `java-properties` old URLs are likewise gone — this build succeeded only
+  thanks to the pre-seeded `~/.cargo/git` cache; a clean environment needs
+  the same `[patch]` treatment or vendoring.
+- NDK r29 (`aarch64-linux-android35-clang`; `LIBCLANG_PATH` must point at
+  `toolchains/llvm/prebuilt/linux-x86_64/lib`, not `bin/`).
+- Stripped e1q module copied to
+  `userspace/ksud/bin/aarch64/android14-6.1_kernelsu.ko`; `cargo build
+  --release --target aarch64-linux-android -p ksud` → exit 0
+  (`aarch64` PIE, `linker64`, NDK r29).
+- Asset-pipeline proof (rust-embed uses `compression`, so module bytes are
+  not greppable): swapping the asset `.ko` changes the output binary size
+  accordingly and rebuilding with the e1q module reproduces the identical
+  4995304-byte binary — the pipeline provably embeds
+  `bin/aarch64/android14-6.1_kernelsu.ko`. Final hardware late-load remains
+  the ground-truth check.
+- Published pair:
+  `kernelsu/android14-6.1_kernelsu-e1q-S9210ZHS6DZG1-kdp.ko` (406160 bytes,
+  SHA-256 `d64647a118b91833ad0580076d06c946f1b5e4f34a52ae8a13aeeeebeb646687`) +
+  `kernelsu/ksud-e1q-S9210ZHS6DZG1-kdp` (4995304 bytes, SHA-256
+  `8874894560e46dd3ab711386f07c3d89635bdaae0e02a806878555bdbdc15049`).
+- Repo updates: `support/targets-v3.json` e1q `kernelsu.size`
+  `4895088` → `4995304` (exploit entry untouched; JSON validated);
+  `docs/SM-S9210-S9210ZHS6DZG1.md` version split (v3.3.0 pending HW /
+  v3.2.5 device-tested history); `kernelsu/README.md` e1q table rows.
+- Remaining: hardware late-load on SM-S9210 (expect Manager
+  `Working <LKM>` version `32601`, no mismatch banner), plus resetprop
+  regression (`set/get/delete/wait`, `ro.*` ≥93B long values,
+  `-f load_props`, `-c/--force rebuild`, magica adb_root toggle,
+  `sys.boot_completed` wait, `su`).
