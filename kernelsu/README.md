@@ -51,7 +51,7 @@ The standalone `.ko` files are retained for auditing. Root My Galaxy downloads
 the corresponding `ksud-*` file because `ksud late-load` loads its embedded
 `<kmi>_kernelsu.ko` asset.
 
-The S916B FZG1 pair is built from Samsung's released `SM-S916B_16_Opensource` tree with the live FZG1 config and Android clang `r450784e`. Its zero-length `__versions` section and retained symbol tables are intended for KernelSU's kallsyms-aware manual loader. Audit against the exact recovered FZG1 `vmlinux.elf` found all 200 undefined names. Plain `insmod` is not supported. The target patch [`KernelSU-v3.2.5-dm2q-fzg1.patch`](patches/KernelSU-v3.2.5-dm2q-fzg1.patch) selects the exact FZG1 `enum ucount_type` ABI and hard-stops RKP syscall-table writes; the build also sets `CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y`. Use the root helper's guarded `--late-load` operation so the loader's security-domain and stdio transition can complete safely. Module initialization is not yet confirmed on S916B hardware.
+The S916B FZG1 pair is built from Samsung's released `SM-S916B_16_Opensource` tree with the live FZG1 config and Android clang `r450784e`. Its zero-length `__versions` section and retained symbol tables are intended for KernelSU's kallsyms-aware manual loader. Audit against the exact recovered FZG1 `vmlinux.elf` found all 200 undefined names. Plain `insmod` is not supported. The target patch [`KernelSU-v3.2.5-dm2q-fzg1.patch`](patches/KernelSU-v3.2.5-dm2q-fzg1.patch) (retained for history; the v3.3.0 5.15 companion is now the version-gated dm3q fix above) selects the exact FZG1 `enum ucount_type` ABI and hard-stops RKP syscall-table writes; the build also sets `CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y`. Use the root helper's guarded `--late-load` operation so the loader's security-domain and stdio transition can complete safely. Module initialization is not yet confirmed on S916B hardware.
 
 The generic 6.1 files remain build-verified only. The E3Q pair is
 device-tested and tied to the full S928U DZF2 release string; it must not be replaced
@@ -133,14 +133,58 @@ contains the complete source delta from the tagged v3.3.0 tree (`v3.3.0`,
   (`v3.2.5`, `b0bc817b4e966aa6aa830834eaf6ef765d821d40`,
   `KSU_VERSION 32525`); retained for the currently published v3.2.5 binaries.
 
-  dm3q 5.15 build-fix (apply after the main patch on Samsung
-  `android13-5.15` / `5.15.189` trees which keep the pre-5.16 `enum ucount_type`
-  name): [`patches/KernelSU-v3.3.0-dm3q-5.15-build-fix.patch`](patches/KernelSU-v3.3.0-dm3q-5.15-build-fix.patch).
-  The v3.2.5 precedents `KernelSU-v3.2.5-dm1q-android13-5.15-build-fix.patch`
+- [`patches/KernelSU-v3.3.0-dm3q-5.15-build-fix.patch`](patches/KernelSU-v3.3.0-dm3q-5.15-build-fix.patch):
+  version-gated `ucount_type` (`<5.16`) vs `rlimit_type` (`>=5.16`) build fix
+  for Samsung `android13-5.15`; apply after the main patch. The v3.2.5
+  precedents `KernelSU-v3.2.5-dm1q-android13-5.15-build-fix.patch`
   (canonical version-gated fix) and `KernelSU-v3.2.5-dm2q-fzg1.patch`
-  (FZG1 `ucount_type` ABI + RKP early-return) remain in `patches/` for history;
-  see `REBUILD-dm3q-v3.3.0.md` for the fuzz-free rebase rationale and per-profile
-  order.
+  (FZG1 `ucount_type` ABI + RKP early-return) remain in `patches/` for
+  history.
+
+## v3.3.0 rebase notes (reconciled with `origin/main` Stage 1)
+
+The active v3.3.0 patch set above is the reconciled port (same content as
+`origin/main` Stage 1): verified with `git apply --check` and a real
+application against a clean `v3.3.0` (`932014ab`) checkout. Adaptations from
+the v3.2.5 delta:
+
+- `kernel/Kbuild`: Samsung `KDP/RKP/DEFEX/NO_PATCH_TEXT` flags re-anchored
+  around the new upstream `CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER` block and
+  the 6.18 `srcroot`/`KSU_KERNEL_DIR` guard; the `-I$(KSU_KERNEL_DIR)/..`
+  addition is kept.
+- `kernel/core/init.c`: include/init-order hunks re-anchored to the new
+  `__x86_64__ && !defined(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER)` guard;
+  upstream's added `ksu_app_profile_init()` call site is preserved.
+- `kernel/hook/arm64/patch_memory.c`: `NO_PATCH_TEXT` early-return kept with
+  fail-closed scope on `ksu_patch_text()` only; upstream's new
+  `scan_call_to()` helper is untouched.
+- `kernel/hook/syscall_hook_manager.c`: RKP/kprobe fallback extended with the
+  6th `execveat` probe (`BYPASS_NR` guard), covering modern bionic
+  `execveat` paths when the syscall table is RKP-protected.
+- `kernel/hook/x86_64/syscall_hook.c`: `void`-to-`int` sync so the
+  dispatcher-failure path (`ksu_dispatcher_nr = -1`) is visible on x86_64.
+- `userspace/ksud`: `late_load.rs` stages first (`stage_daemon_from()` on the
+  payload-staged `/data/local/tmp/.ksud-stage`) and then calls 2-argument
+  `finish_install(None, None)`, matching the new upstream
+  `install(None, None)` call shape.
+  The `install()` split keeps the `data_path` boot-backup move and the
+  `libadbroot` handling inside `finish_install()`; `cli.rs`
+  keeps calling 2-arg `install()`; `daemonize()` is kept for compatibility
+  (only `late-load` stopped calling it).
+  Staging keeps upstream's `/proc/self/exe` self-copy rule (with its `DO NOT
+  resolve` note): `stage_daemon()` copies via `/proc/self/exe` with a
+  `read_link`-based self-run guard, and the externally staged file is moved
+  by `rename()` with `chown root:root`.
+- Companions: single version-gated `dm3q` 5.15 build-fix (covers the `6.12`
+  `kdp_usecount_sub_and_test` branch now present in `samsung_kdp.c`).
+  Apply order is main patch first, then the companion on `android13-5.15`
+  only. The retired v3.3.0 `dm1q`/`dm2q` drafts are not published.
+
+Unresolved upstream deltas that still need per-target hardware validation
+before any binary is rebuilt (from the Phase-0 investigation comparing
+`v3.2.5...v3.3.0`, 76 commits): the `execveat` handling, tracepoint
+minimum-priority hook ordering, webview-zygote `umount` semantics,
+and the tightened APK signature-block verification (only v2 blocks).
 
 ## 6.1 generalization
 
