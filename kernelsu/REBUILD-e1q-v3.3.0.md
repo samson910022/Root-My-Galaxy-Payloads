@@ -79,7 +79,24 @@ Done 2026-10-01. Container
 
 ## PhaseC — static audit
 
-(Pending.)
+Done 2026-10-01, on the unstripped PhaseB module:
+
+- `check_symbol e1q-v3.3.0-unstripped.ko vmlinux.elf` → exit 0.
+- `audit_module_against_target.py --manual-relocation` (with the PhaseA
+  `Module.symvers`):
+  `undefined symbols: 202 / module version entries: 0 /
+  missing from target symbol table: 0 / resolved from kallsyms: 70 /
+  target CRC mismatches: 0` — identical fingerprint to the v3.2.5 reference
+  module (202/0/0/70/empty `__versions`).
+- `readelf -SW`: `__versions` size 0; `.symtab`/`.strtab` present;
+  zero `UND stop_machine` imports.
+- `llvm-strip -d` (NDK r29) → published module
+  `android14-6.1_kernelsu-e1q-S9210ZHS6DZG1-kdp.ko`, 406160 bytes
+  (v3.2.5 reference: 398336 bytes; growth consistent with the added
+  execveat fallback), SHA-256
+  `d64647a118b91833ad0580076d06c946f1b5e4f34a52ae8a13aeeeebeb646687`.
+- Post-strip re-verified: exact `vermagic`, `__versions` size 0,
+  `.symtab`/`.strtab` retained, zero `UND stop_machine`.
 
 ## PhaseD — ksud embedding + repo publication
 
