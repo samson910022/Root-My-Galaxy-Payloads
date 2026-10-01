@@ -126,17 +126,21 @@ Done 2026-10-01.
   not greppable): swapping the asset `.ko` changes the output binary size
   accordingly and rebuilding with the e1q module reproduces the identical
   4995304-byte binary — the pipeline provably embeds
-  `bin/aarch64/android14-6.1_kernelsu.ko`. Final hardware late-load remains
-  the ground-truth check.
+  `bin/aarch64/android14-6.1_kernelsu.ko`. This proves the asset influences
+  the output, not the embedded module's identity; only extraction or
+  hardware late-load proves that. Final hardware late-load remains the
+  ground-truth check.
 - Published pair:
   `kernelsu/android14-6.1_kernelsu-e1q-S9210ZHS6DZG1-kdp.ko` (406160 bytes,
   SHA-256 `d64647a118b91833ad0580076d06c946f1b5e4f34a52ae8a13aeeeebeb646687`) +
   `kernelsu/ksud-e1q-S9210ZHS6DZG1-kdp` (4995304 bytes, SHA-256
   `8874894560e46dd3ab711386f07c3d89635bdaae0e02a806878555bdbdc15049`).
-- Repo updates: `support/targets-v3.json` e1q `kernelsu.size`
-  `4895088` → `4995304` (exploit entry untouched; JSON validated);
-  `docs/SM-S9210-S9210ZHS6DZG1.md` version split (v3.3.0 pending HW /
+- Repo updates: `docs/SM-S9210-S9210ZHS6DZG1.md` version split (v3.3.0 pending HW /
   v3.2.5 device-tested history); `kernelsu/README.md` e1q table rows.
+  `support/targets-v3.json` e1q `kernelsu.size` stays at `4895088`
+  (device-tested v3.2.5 pair) — the bump to `4995304` is gated on hardware
+  validation (`Working <LKM>` version `32601`, no mismatch banner) and
+  must ship together with the verified binaries.
 - Remaining: hardware late-load on SM-S9210 (expect Manager
   `Working <LKM>` version `32601`, no mismatch banner), plus resetprop
   regression (`set/get/delete/wait`, `ro.*` ≥93B long values,

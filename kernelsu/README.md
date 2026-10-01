@@ -34,7 +34,7 @@ They are not interchangeable between KMIs.
 | `android14-6.1_kernelsu-e1s-S921BXXSFDZE1-kdp.ko` | `SM-S921B`, `S921BXXSFDZE1` | `android14-6.1` | Exact E1S no-patch-text module with target `vermagic`, audited for manual relocation |
 | `ksud-e1s-S921BXXSFDZE1-kdp` | Same exact E1S build | `android14-6.1` | Device-tested late-load binary embedding the E1S no-patch-text module |
 | `android14-6.1_kernelsu-e1q-S9210ZHS6DZG1-kdp.ko` | `SM-S9210`, `S9210ZHS6DZG1` | `android14-6.1` | Exact E1Q no-patch-text module with target `vermagic`, audited for manual relocation; v3.3.0 rebuild (static-audited, hardware validation pending; v3.2.5 pair was device-tested) |
-| `ksud-e1q-S9210ZHS6DZG1-kdp` | Same exact E1Q build | `android14-6.1` | Late-load binary embedding the E1Q v3.3.0 module |
+| `ksud-e1q-S9210ZHS6DZG1-kdp` | Same exact E1Q build | `android14-6.1` | Late-load binary embedding the E1Q v3.3.0 module (static-audited, hardware validation pending) |
 | `android14-6.1_kernelsu-samsung-kdp.ko` | `SM-S721N` `S721NKSSCDZF3`; `SM-S921B` `S921BXXSFDZF2` | `android14-6.1` | Standalone Samsung KDP/RKP/DEFEX module with target `vermagic` |
 | `ksud-samsung-android14-6.1-kdp` | Same verified 6.1 targets | `android14-6.1` | Late-load binary embedding the 6.1 module |
 | `android12-5.10_kernelsu-samsung-kdp.ko` | `SM-A155N` `A155NKSS6BYH1` | `android12-5.10` | Standalone Samsung KDP/RKP/DEFEX module built against the exact A15 kernel |
@@ -241,6 +241,14 @@ git apply KernelSU-v3.3.0-dm3q-5.15-build-fix.patch
 Upstream v3.3.0 references DDK `20260828` (adds android17-6.18 and x64 LKM
 builds). The pinned DDK below is unchanged: keep building each target
 against its pinned DDK and exact `UTS_RELEASE`.
+
+> Clean-checkout caveat: the v3.3.0-pinned `prop-rs-android` source
+> (`Kernel-SU/ksu_props`) is gone (404), and `adb_client` /
+> `java-properties` old URLs are likewise dead — a fresh `cargo build -p
+> ksud` fails at dependency resolution without the pre-seeded cargo cache.
+> See `REBUILD-e1q-v3.3.0.md` PhaseD for the workspace-only `[patch]`
+> workaround (pointing at the upstream-blessed `KernelSU2/ksu_props`
+> successor); vendor or patch before building clean.
 
 Rebuild status on this branch: except e1q-S9210ZHS6DZG1 (rebuilt for v3.3.0,
 static-audited, hardware validation pending — see `REBUILD-e1q-v3.3.0.md`),
