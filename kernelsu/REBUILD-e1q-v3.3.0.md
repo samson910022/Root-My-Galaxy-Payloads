@@ -142,3 +142,16 @@ Done 2026-10-01.
   regression (`set/get/delete/wait`, `ro.*` ≥93B long values,
   `-f load_props`, `-c/--force rebuild`, magica adb_root toggle,
   `sys.boot_completed` wait, `su`).
+
+## Retirement note: `update-kernelsu-own` (own-repo PR #1)
+
+Reviewed 2026-10-01 (dual subagents): the `update-kernelsu-own` branch
+(prior rebase + e1q merge) has nothing worth salvaging into this branch —
+its main-patch rebase, DDK/gates text, and 5.15 companions are all
+superseded by the reconciled Stage 1 content above in reviewed, verified
+form, and its e1q baseline came from `a311cb8`, already an ancestor here
+with newer PhaseD binaries on top. Retired without merge; branch and fork
+PR (`samson910022/Root-My-Galaxy-Payloads#1`) abandoned (tag
+`archive-update-kernelsu-own-20261001` kept for traceability).
+`update-kernelsu` (upstream PR `BuSung-dev/Root-My-Galaxy-Payloads#365`) is
+unaffected and retained.
