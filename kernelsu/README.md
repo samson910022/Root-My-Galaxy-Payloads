@@ -9,9 +9,12 @@ They are not interchangeable between KMIs.
 > remain `v3.2.5` builds (tag `v3.2.5`, commit
 > `b0bc817b4e966aa6aa830834eaf6ef765d821d40`, `KSU_VERSION 32525` including the
 > `Kbuild` fallback `KSU_VERSION ?= 32525`) until the v3.3.0 rebuilds are
-> hardware-verified and republished. Version codes `32525` / `32525-2` quoted
-> below are v3.2.5 historical device measurements; v3.3.0 (`32601`) is pending
-> verification.
+> hardware-verified and republished. The e1q v3.3.0 Phase-D candidate
+> now has one successful full-chain Shizuku app run on SM-S9210 (2026-10-03),
+> but Manager UI and resetprop acceptance checks are pending, so it has not
+> replaced the published pair/feed (build record: `REBUILD-e1q-v3.3.0.md`).
+> Version codes `32525` / `32525-2` quoted
+> below are v3.2.5 historical device measurements; e1q v3.3.0 reports `32601`.
 
 ## Versioned artifacts
 
@@ -33,6 +36,8 @@ They are not interchangeable between KMIs.
 | `ksud-e1s-S921NKSSFDZF3-kdp` | Same exact S921N build | `android14-6.1` | Device-tested late-load binary embedding the S921N no-patch-text module |
 | `android14-6.1_kernelsu-e1s-S921BXXSFDZE1-kdp.ko` | `SM-S921B`, `S921BXXSFDZE1` | `android14-6.1` | Exact E1S no-patch-text module with target `vermagic`, audited for manual relocation |
 | `ksud-e1s-S921BXXSFDZE1-kdp` | Same exact E1S build | `android14-6.1` | Device-tested late-load binary embedding the E1S no-patch-text module |
+| `android14-6.1_kernelsu-e1q-S9210ZHS6DZG1-kdp.ko` | `SM-S9210`, `S9210ZHS6DZG1` | `android14-6.1` | Exact E1Q no-patch-text module with target `vermagic`, audited for manual relocation; on-disk remains v3.2.5 device-tested pair, v3.3.0 rebuild built (static-audited, one candidate HW success, NOT yet published — see `REBUILD-e1q-v3.3.0.md`) |
+| `ksud-e1q-S9210ZHS6DZG1-kdp` | Same exact E1Q build | `android14-6.1` | Late-load binary embedding the E1Q module; on-disk remains v3.2.5 device-tested (v3.3.0 built, static-audited, one candidate HW success, NOT yet published) |
 | `android14-6.1_kernelsu-samsung-kdp.ko` | `SM-S721N` `S721NKSSCDZF3`; `SM-S921B` `S921BXXSFDZF2` | `android14-6.1` | Standalone Samsung KDP/RKP/DEFEX module with target `vermagic` |
 | `ksud-samsung-android14-6.1-kdp` | Same verified 6.1 targets | `android14-6.1` | Late-load binary embedding the 6.1 module |
 | `android12-5.10_kernelsu-samsung-kdp.ko` | `SM-A155N` `A155NKSS6BYH1` | `android12-5.10` | Standalone Samsung KDP/RKP/DEFEX module built against the exact A15 kernel |
@@ -47,11 +52,38 @@ They are not interchangeable between KMIs.
 | `android12-5.10_kernelsu-A536EXXSNGZG3-kdp.ko` | `SM-A536E`, `A536EXXSNGZG3` | `android12-5.10` | Device-tested exact A53 module with Samsung KDP/RKP/DEFEX support and live text/table patching disabled |
 | `ksud-A536EXXSNGZG3-kdp` | Same exact A53 build | `android12-5.10` | Device-tested late-load binary embedding the exact A53 module |
 
+## e1q v3.3.0 candidate status
+
+The e1q Phase-D candidate pair from commit
+`8236c84301282b5415412d867ab71d4a739e0809` has now completed one full-chain
+hardware run through Root My Galaxy S24 `0.3.2-s24.1` in Shizuku mode on
+`SM-S9210` / `S9210ZHS6DZG1` (2026-10-03):
+
+- `ksud`: 4,995,304 bytes, SHA-256
+  `8874894560e46dd3ab711386f07c3d89635bdaae0e02a806878555bdbdc15049`;
+- embedded exact-release `.ko`: 406,160 bytes, SHA-256
+  `d64647a118b91833ad0580076d06c946f1b5e4f34a52ae8a13aeeeebeb646687`;
+- `CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y`; the exact-release vermagic and
+  target-symbol audit are documented in `REBUILD-e1q-v3.3.0.md` (historical Phase-D record: https://github.com/samson910022/Root-My-Galaxy-Payloads/blob/8236c84301282b5415412d867ab71d4a739e0809/kernelsu/REBUILD-e1q-v3.3.0.md);
+- app history shows exploit success on attempt 1/24 (`done=1 root=1`),
+  successful KernelSU control verification, then the module `Live` with SELinux
+  Enforcing.
+
+The first `late-load --ephemeral` invocation was rejected as an unexpected
+argument and reported that the driver fd was unavailable. The app helper then
+retried plain `late-load`, which succeeded. This proves one app-mediated
+full-chain run with the helper fallback, not direct `--ephemeral` support.
+Manager package version `32601` was installed, but its `Working <LKM>` UI
+status was not captured; resetprop regressions, repeatability, and reboot
+persistence remain unverified. Keep the published e1q binaries and support
+feed on v3.2.5 until those checks pass. Detailed evidence:
+[`docs/SM-S9210-S9210ZHS6DZG1.md`](../docs/SM-S9210-S9210ZHS6DZG1.md).
+
 The standalone `.ko` files are retained for auditing. Root My Galaxy downloads
 the corresponding `ksud-*` file because `ksud late-load` loads its embedded
 `<kmi>_kernelsu.ko` asset.
 
-The S916B FZG1 pair is built from Samsung's released `SM-S916B_16_Opensource` tree with the live FZG1 config and Android clang `r450784e`. Its zero-length `__versions` section and retained symbol tables are intended for KernelSU's kallsyms-aware manual loader. Audit against the exact recovered FZG1 `vmlinux.elf` found all 200 undefined names. Plain `insmod` is not supported. The target patch [`KernelSU-v3.2.5-dm2q-fzg1.patch`](patches/KernelSU-v3.2.5-dm2q-fzg1.patch) selects the exact FZG1 `enum ucount_type` ABI and hard-stops RKP syscall-table writes; the build also sets `CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y`. Use the root helper's guarded `--late-load` operation so the loader's security-domain and stdio transition can complete safely. Module initialization is not yet confirmed on S916B hardware.
+The S916B FZG1 pair is built from Samsung's released `SM-S916B_16_Opensource` tree with the live FZG1 config and Android clang `r450784e`. Its zero-length `__versions` section and retained symbol tables are intended for KernelSU's kallsyms-aware manual loader. Audit against the exact recovered FZG1 `vmlinux.elf` found all 200 undefined names. Plain `insmod` is not supported. The target patch [`KernelSU-v3.2.5-dm2q-fzg1.patch`](patches/KernelSU-v3.2.5-dm2q-fzg1.patch) (retained for history; the v3.3.0 5.15 companion is now the version-gated dm3q fix above) selects the exact FZG1 `enum ucount_type` ABI and hard-stops RKP syscall-table writes; the build also sets `CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT=y`. Use the root helper's guarded `--late-load` operation so the loader's security-domain and stdio transition can complete safely. Module initialization is not yet confirmed on S916B hardware.
 
 The generic 6.1 files remain build-verified only. The E3Q pair is
 device-tested and tied to the full S928U DZF2 release string; it must not be replaced
@@ -133,14 +165,58 @@ contains the complete source delta from the tagged v3.3.0 tree (`v3.3.0`,
   (`v3.2.5`, `b0bc817b4e966aa6aa830834eaf6ef765d821d40`,
   `KSU_VERSION 32525`); retained for the currently published v3.2.5 binaries.
 
-  dm3q 5.15 build-fix (apply after the main patch on Samsung
-  `android13-5.15` / `5.15.189` trees which keep the pre-5.16 `enum ucount_type`
-  name): [`patches/KernelSU-v3.3.0-dm3q-5.15-build-fix.patch`](patches/KernelSU-v3.3.0-dm3q-5.15-build-fix.patch).
-  The v3.2.5 precedents `KernelSU-v3.2.5-dm1q-android13-5.15-build-fix.patch`
+- [`patches/KernelSU-v3.3.0-dm3q-5.15-build-fix.patch`](patches/KernelSU-v3.3.0-dm3q-5.15-build-fix.patch):
+  version-gated `ucount_type` (`<5.16`) vs `rlimit_type` (`>=5.16`) build fix
+  for Samsung `android13-5.15`; apply after the main patch. The v3.2.5
+  precedents `KernelSU-v3.2.5-dm1q-android13-5.15-build-fix.patch`
   (canonical version-gated fix) and `KernelSU-v3.2.5-dm2q-fzg1.patch`
-  (FZG1 `ucount_type` ABI + RKP early-return) remain in `patches/` for history;
-  see `REBUILD-dm3q-v3.3.0.md` for the fuzz-free rebase rationale and per-profile
-  order.
+  (FZG1 `ucount_type` ABI + RKP early-return) remain in `patches/` for
+  history.
+
+## v3.3.0 rebase notes (reconciled with `origin/main` Stage 1)
+
+The active v3.3.0 patch set above is the reconciled port (same content as
+`origin/main` Stage 1): verified with `git apply --check` and a real
+application against a clean `v3.3.0` (`932014ab`) checkout. Adaptations from
+the v3.2.5 delta:
+
+- `kernel/Kbuild`: Samsung `KDP/RKP/DEFEX/NO_PATCH_TEXT` flags re-anchored
+  around the new upstream `CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER` block and
+  the 6.18 `srcroot`/`KSU_KERNEL_DIR` guard; the `-I$(KSU_KERNEL_DIR)/..`
+  addition is kept.
+- `kernel/core/init.c`: include/init-order hunks re-anchored to the new
+  `__x86_64__ && !defined(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER)` guard;
+  upstream's added `ksu_app_profile_init()` call site is preserved.
+- `kernel/hook/arm64/patch_memory.c`: `NO_PATCH_TEXT` early-return kept with
+  fail-closed scope on `ksu_patch_text()` only; upstream's new
+  `scan_call_to()` helper is untouched.
+- `kernel/hook/syscall_hook_manager.c`: RKP/kprobe fallback extended with the
+  6th `execveat` probe (`BYPASS_NR` guard), covering modern bionic
+  `execveat` paths when the syscall table is RKP-protected.
+- `kernel/hook/x86_64/syscall_hook.c`: `void`-to-`int` sync so the
+  dispatcher-failure path (`ksu_dispatcher_nr = -1`) is visible on x86_64.
+- `userspace/ksud`: `late_load.rs` stages first (`stage_daemon_from()` on the
+  payload-staged `/data/local/tmp/.ksud-stage`) and then calls 2-argument
+  `finish_install(None, None)`, matching the new upstream
+  `install(None, None)` call shape.
+  The `install()` split keeps the `data_path` boot-backup move and the
+  `libadbroot` handling inside `finish_install()`; `cli.rs`
+  keeps calling 2-arg `install()`; `daemonize()` is kept for compatibility
+  (only `late-load` stopped calling it).
+  Staging keeps upstream's `/proc/self/exe` self-copy rule (with its `DO NOT
+  resolve` note): `stage_daemon()` copies via `/proc/self/exe` with a
+  `read_link`-based self-run guard, and the externally staged file is moved
+  by `rename()` with `chown root:root`.
+- Companions: single version-gated `dm3q` 5.15 build-fix (covers the `6.12`
+  `kdp_usecount_sub_and_test` branch now present in `samsung_kdp.c`).
+  Apply order is main patch first, then the companion on `android13-5.15`
+  only. The retired v3.3.0 `dm1q`/`dm2q` drafts are not published.
+
+Unresolved upstream deltas that still need per-target hardware validation
+before any binary is rebuilt (from the Phase-0 investigation comparing
+`v3.2.5...v3.3.0`, 76 commits): the `execveat` handling, tracepoint
+minimum-priority hook ordering, webview-zygote `umount` semantics,
+and the tightened APK signature-block verification (only v2 blocks).
 
 ## 6.1 generalization
 
@@ -191,6 +267,34 @@ git apply KernelSU-v3.3.0-dm3q-5.15-build-fix.patch
 > `git apply KernelSU-v3.2.5-samsung-kdp-rkp-defex.patch` (plus
 > `KernelSU-v3.2.5-dm1q-android13-5.15-build-fix.patch` /
 > `KernelSU-v3.2.5-dm2q-fzg1.patch` where applicable).
+
+Upstream v3.3.0 references DDK `20260828` (adds android17-6.18 and x64 LKM
+builds). The pinned DDK below is unchanged: keep building each target
+against its pinned DDK and exact `UTS_RELEASE`.
+
+> Clean-checkout caveat: the v3.3.0-pinned `prop-rs-android` source
+> (`Kernel-SU/ksu_props`) is gone (404), and `adb_client` /
+> `java-properties` old URLs are likewise dead — a fresh `cargo build -p
+> ksud` fails at dependency resolution without the pre-seeded cargo cache.
+> See `REBUILD-e1q-v3.3.0.md` PhaseD for the workspace-only `[patch]`
+> workaround (pointing at the upstream-blessed `KernelSU2/ksu_props`
+> successor); vendor or patch before building clean.
+
+Rebuild status: e1q-S9210ZHS6DZG1 v3.3.0 built and
+static-audited with one candidate hardware success (2026-10-03) but NOT yet published
+(on-disk pair remains v3.2.5 device-tested; Manager UI, resetprop, repeatability,
+and reboot-persistence checks pending — see `REBUILD-e1q-v3.3.0.md`),
+all published `.ko` / `ksud-*`
+binaries in this directory remain v3.2.5 artifacts. Rebuilding
+is per target, in this order: exact-`vermagic` module → `check_symbol`
+against the recovered target `vmlinux.elf` →
+`audit_module_against_target.py --manual-relocation` (zero missing, zero
+`__versions`, zero CRC mismatches, no `stop_machine` import) → embed into
+`ksud` and publish the `.ko` / `ksud-*` pair together → hardware late-load
+(`u:r:ksu:s0`, Manager `Working <LKM>` with version `32601`, no mismatch
+banner). `support/targets-v3.json` needs no schema change; only replaced
+artifacts' `size` fields get updated on rebuild. `targets-v2.json` stays
+frozen.
 
 For the Samsung 6.1 module, use DDK image
 `ghcr.io/ylarod/ddk-min:android14-6.1-20260313` and set:
