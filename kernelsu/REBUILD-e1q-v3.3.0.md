@@ -134,7 +134,7 @@ Done 2026-10-01 for build + static audit; repo publication gated on HW validatio
   the output, not the embedded module's identity; only extraction or
   hardware late-load proves that. Final hardware late-load remains the
   ground-truth check.
-- Built pair (pending HW, NOT yet published to repo):
+- Built pair (one candidate HW success 2026-10-03, NOT yet published to repo; acceptance gate still closed):
   `android14-6.1_kernelsu-e1q-S9210ZHS6DZG1-kdp.ko` (406160 bytes,
   SHA-256 `d64647a118b91833ad0580076d06c946f1b5e4f34a52ae8a13aeeeebeb646687`) +
   `ksud-e1q-S9210ZHS6DZG1-kdp` (4995304 bytes, SHA-256
@@ -144,16 +144,18 @@ Done 2026-10-01 for build + static audit; repo publication gated on HW validatio
   v3.2.5 device-tested pair (398336 bytes /
   `1b7847944dfb3f4491d2fe258c85f3292b762a5536180850fa157852b9cae79f`; 4895088
   bytes / `67b49cadfbbc518ac1fca3f7e514782110e896103882e7caa5cccaa1572ee542`).
-  `docs/SM-S9210-S9210ZHS6DZG1.md` version split (v3.3.0 pending HW /
+  `docs/SM-S9210-S9210ZHS6DZG1.md` version split (v3.3.0 one candidate success, acceptance pending /
   v3.2.5 device-tested history); `kernelsu/README.md` e1q table rows describe the
-  pending build, not the on-disk binaries.
+  ungated build, not the on-disk binaries.
   `support/targets-v3.json` e1q `kernelsu.size` stays at `4895088`
-  (device-tested v3.2.5 pair) — the bump to `4995304` is gated on hardware
-  validation (`Working <LKM>` version `32601`, no mismatch banner) and
+  (device-tested v3.2.5 pair) — the bump to `4995304` is gated on the remaining
+  acceptance (Manager `Working <LKM>` UI capture showing version `32601` with no mismatch banner,
+  resetprop regression, repeatability, reboot persistence) and
   must ship atomically together with the verified binaries (`.ko` + `ksud` +
   `json.size` in one commit).
-- Remaining: hardware late-load on SM-S9210 (expect Manager
-  `Working <LKM>` version `32601`, no mismatch banner), plus resetprop
+- Remaining acceptance (gate stays closed until all pass): Manager
+  `Working <LKM>` UI capture showing version `32601` with no mismatch banner
+  (package installed during the 2026-10-03 run, but UI state not captured), plus resetprop
   regression (`set/get/delete/wait`, `ro.*` ≥93B long values,
   `-f load_props`, `-c/--force rebuild`, magica adb_root toggle,
   `sys.boot_completed` wait, `su`).

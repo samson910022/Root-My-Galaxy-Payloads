@@ -1,10 +1,16 @@
 API ?= 35
 TARGET ?= pa3q-S938NKSUACZF1
 
-# Sanitize & freeze (must precede ANY $(VAR) expansion, including the
-# $(shell uname -s) below which would otherwise expand attacker vars):
+# Regression tests (run before merge; none must create its /tmp marker):
+#   make help 'UNAME_S=$(shell touch /tmp/pwn-u)'
+#   make help 'PRELOAD_SRCS=$(shell touch /tmp/pwn-s)'
+#   make help 'TARGET=$(shell touch /tmp/pwn-t)'
+#   make help 'OUTDIR=$(shell touch /tmp/pwn-o)'
+#   make help 'ANDROID_NDK_HOME=$(shell touch /tmp/pwn-n)'
+#   make help 'TARGET_CC=$(shell touch /tmp/pwn-c)'
+# Sanitize & freeze (must precede ANY $(VAR) expansion):
 # command-line/env vars are recursive by default, so $(shell ...) would run
-# during parsing before any blacklist sees it. Inspect raw values first.
+# during parsing before any check sees it. Inspect raw values first.
 TARGET_RAW := $(value TARGET)
 API_RAW := $(value API)
 ifneq ($(findstring $,$(TARGET_RAW)),)
@@ -15,6 +21,8 @@ $(error Invalid API: must not contain $$)
 endif
 TARGET := $(TARGET_RAW)
 API := $(API_RAW)
+override TARGET := $(TARGET)
+override API := $(API)
 # OUTDIR default is derived from the now-frozen TARGET (simply-expanded,
 # safe). Only CLI/env-provided OUTDIR is treated as untrusted raw.
 ifeq ($(origin OUTDIR),undefined)
@@ -45,6 +53,53 @@ $(error Invalid APP_TARGET_CFLAGS: must not contain $$)
 endif
 ifneq ($(findstring $,$(value COMMON_CFLAGS)),)
 $(error Invalid COMMON_CFLAGS: must not contain $$)
+endif
+# Intended user inputs (CLI/env): TARGET, API, OUTDIR, ANDROID_NDK_HOME,
+# TARGET_CC, TARGET_CFLAGS, APP_TARGET_CFLAGS, COMMON_CFLAGS.
+# Everything else assigned in this file is internal and must not be
+# overridable from the command line (GNU make CLI vars take precedence
+# over ordinary assignments, so internal lists/paths like PRELOAD_SRCS or
+# TARGET_HEADER could otherwise inject parse-time $(shell ...) via
+# prerequisite expansion).
+# Legacy/internal names that must never expand from CLI/env: UNAME_S was
+# previously computed via $(shell uname -s) (now removed; toolchain is
+# selected by existence check). Unexport it so a CLI-provided recursive
+# value is never expanded during recipe-shell export.
+unexport UNAME_S
+# Internal vars: reject make functions early with a clear error, then force
+# file values with `override` below so CLI definitions are never consumed.
+ifneq ($(findstring $,$(value TARGET_HEADER)),)
+$(error Invalid TARGET_HEADER override: must not contain $$)
+endif
+ifneq ($(findstring $,$(value TARGET_INCLUDE)),)
+$(error Invalid TARGET_INCLUDE override: must not contain $$)
+endif
+ifneq ($(findstring $,$(value PRELOAD)),)
+$(error Invalid PRELOAD override: must not contain $$)
+endif
+ifneq ($(findstring $,$(value APP_PRELOAD)),)
+$(error Invalid APP_PRELOAD override: must not contain $$)
+endif
+ifneq ($(findstring $,$(value APP_RELEASE)),)
+$(error Invalid APP_RELEASE override: must not contain $$)
+endif
+ifneq ($(findstring $,$(value APP_STABLE)),)
+$(error Invalid APP_STABLE override: must not contain $$)
+endif
+ifneq ($(findstring $,$(value ROOT_HELPER)),)
+$(error Invalid ROOT_HELPER override: must not contain $$)
+endif
+ifneq ($(findstring $,$(value PRELOAD_SRCS)),)
+$(error Invalid PRELOAD_SRCS override: must not contain $$)
+endif
+ifneq ($(findstring $,$(value APP_PRELOAD_SRCS)),)
+$(error Invalid APP_PRELOAD_SRCS override: must not contain $$)
+endif
+ifneq ($(findstring $,$(value APP_RELEASE_OPT)),)
+$(error Invalid APP_RELEASE_OPT override: must not contain $$)
+endif
+ifneq ($(findstring $,$(value APP_RELEASE_LINK_FLAGS)),)
+$(error Invalid APP_RELEASE_LINK_FLAGS override: must not contain $$)
 endif
 # NOTE: no freeze here; these are (re)defined below. Freeze happens after
 # their file definitions so CLI values stay simply-expanded without
@@ -108,7 +163,7 @@ ifneq ($(OUTDIR_BAD),)
 $(error Refusing to use OUTDIR "$(OUTDIR)": must match ^[A-Za-z0-9._/-]+$$)
 endif
 
-SLIDE_STACK_WRITER_TARGETS := dm2q-S916BXXSAFZG1 dm3q-S918BXXSAFZF5 dm3q-S9180ZHS8FZG1 gts9u-X916BXXS6EZG3 dm1q-S911U1UES6DYI3 gts9-X710XXS6EZF1
+override SLIDE_STACK_WRITER_TARGETS := dm2q-S916BXXSAFZG1 dm3q-S918BXXSAFZF5 dm3q-S9180ZHS8FZG1 gts9u-X916BXXS6EZG3 dm1q-S911U1UES6DYI3 gts9-X710XXS6EZF1
 ifneq ($(filter $(TARGET),$(SLIDE_STACK_WRITER_TARGETS)),)
 APP_TARGET_CFLAGS := -DSLIDE_STACK_WRITER=1
 else
@@ -118,54 +173,58 @@ ifeq ($(TARGET),a53x-A536EXXSNGZG3)
 API := 31
 endif
 
-TARGET_HEADER := src/targets/$(TARGET)/target.h
-TARGET_INCLUDE := targets/$(TARGET)/target.h
+override TARGET_HEADER := src/targets/$(TARGET)/target.h
+override TARGET_INCLUDE := targets/$(TARGET)/target.h
 # ANDROID_NDK_HOME may arrive from CLI/env as a recursive variable;
-# reject make expansion before it is ever expanded.
+# reject make expansion before it is ever expanded, then freeze.
 NDK_RAW := $(value ANDROID_NDK_HOME)
 ifneq ($(findstring $,$(NDK_RAW)),)
 $(error Invalid ANDROID_NDK_HOME: must not contain $$)
 endif
-ANDROID_NDK_HOME := $(NDK_RAW)
-UNAME_S := $(shell uname -s)
-ifeq ($(UNAME_S),Darwin)
-TARGET_CC := $(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android$(API)-clang
+override ANDROID_NDK_HOME := $(NDK_RAW)
+# No parse-time $(shell ...) in this file (a parse-time shell would expand
+# arbitrary CLI recursive vars during export). Select the NDK toolchain by
+# existence instead of `uname -s`: prefer the darwin prebuilt when present,
+# otherwise linux (also the default when no NDK is installed, for help/info).
+override _DARWIN_CC := $(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android$(API)-clang
+override _LINUX_CC := $(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android$(API)-clang
+ifeq ($(origin TARGET_CC),undefined)
+ifneq ($(wildcard $(_DARWIN_CC)),)
+override TARGET_CC := $(_DARWIN_CC)
 else
-TARGET_CC := $(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android$(API)-clang
+override TARGET_CC := $(_LINUX_CC)
 endif
-# Freeze TARGET_CC (CLI override is recursive by default): reject $ first,
-# then force simply-expanded so later $(TARGET_CC) uses cannot re-expand it.
-ifneq ($(findstring $,$(value TARGET_CC)),)
-$(error Invalid TARGET_CC: must not contain $$)
-endif
+else
+# CLI-provided TARGET_CC: already $-checked above; freeze it.
 override TARGET_CC := $(value TARGET_CC)
+endif
 
 # Bare `make` defaults to `all` (needs toolchain); only the listed
 # inspection/cleanup goals skip the check.
 ifeq ($(strip $(MAKECMDGOALS)),)
-NEEDS_TC := all
+override NEEDS_TC := all
 else
-NEEDS_TC := $(filter-out help info clean distclean,$(MAKECMDGOALS))
+override NEEDS_TC := $(filter-out help info clean distclean,$(MAKECMDGOALS))
 endif
 ifeq ($(NEEDS_TC),)
 # info/help/clean-only invocation: skip toolchain check.
 else
 ifeq ($(wildcard $(TARGET_CC)),)
-$(error set ANDROID_NDK_HOME to an Android NDK containing aarch64-linux-android$(API)-clang for $(UNAME_S))
+$(error set ANDROID_NDK_HOME to an Android NDK containing aarch64-linux-android$(API)-clang)
 endif
 endif
 
-PRELOAD := $(OUTDIR)/cve-2026-43499
-APP_PRELOAD := $(OUTDIR)/cve-2026-43499-app.so
-APP_RELEASE := $(OUTDIR)/cve-2026-43499-app.release.so
-APP_STABLE := $(OUTDIR)/cve-2026-43499-app.stable.so
-APP_RELEASE_SIZE := 104128
-ROOT_HELPER := $(OUTDIR)/cve-2026-43499-root
+override PRELOAD := $(OUTDIR)/cve-2026-43499
+override APP_PRELOAD := $(OUTDIR)/cve-2026-43499-app.so
+override APP_RELEASE := $(OUTDIR)/cve-2026-43499-app.release.so
+override APP_STABLE := $(OUTDIR)/cve-2026-43499-app.stable.so
+override APP_RELEASE_SIZE := 104128
+override ROOT_HELPER := $(OUTDIR)/cve-2026-43499-root
 TARGET_CFLAGS :=
-APP_RELEASE_OPT := -Oz
-APP_RELEASE_LINK_FLAGS := -Wl,--gc-sections -Wl,--icf=all -s
+override APP_RELEASE_OPT := -Oz
+override APP_RELEASE_LINK_FLAGS := -Wl,--gc-sections -Wl,--icf=all -s
 
-PRELOAD_SRCS := \
+override PRELOAD_SRCS := \
   src/main.c \
   src/util.c \
   src/slide.c \
@@ -174,7 +233,7 @@ PRELOAD_SRCS := \
   src/root.c \
   src/preload.c
 
-APP_PRELOAD_SRCS := \
+override APP_PRELOAD_SRCS := \
   src/main.c \
   src/util.c \
   src/slide_app.c \
@@ -184,14 +243,14 @@ APP_PRELOAD_SRCS := \
   src/preload.c
 
 ifeq ($(TARGET),a53x-A536EXXSNGZG3)
-APP_PRELOAD_SRCS := \
+override APP_PRELOAD_SRCS := \
   src/targets/a53x-A536EXXSNGZG3/payload.c \
   src/targets/a53x-A536EXXSNGZG3/chain.c \
   src/targets/a53x-A536EXXSNGZG3/ghostlock.c \
   src/targets/a53x-A536EXXSNGZG3/page.c
-PRELOAD_SRCS := $(APP_PRELOAD_SRCS)
-APP_RELEASE_OPT := -O2
-APP_RELEASE_LINK_FLAGS := -Wl,--gc-sections -Wl,--icf=all -s
+override PRELOAD_SRCS := $(APP_PRELOAD_SRCS)
+override APP_RELEASE_OPT := -O2
+override APP_RELEASE_LINK_FLAGS := -Wl,--gc-sections -Wl,--icf=all -s
 endif
 
 COMMON_CFLAGS := \
