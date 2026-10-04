@@ -170,7 +170,7 @@ else
 APP_TARGET_CFLAGS :=
 endif
 ifeq ($(TARGET),a53x-A536EXXSNGZG3)
-API := 31
+override API := 31
 endif
 
 override TARGET_HEADER := src/targets/$(TARGET)/target.h
