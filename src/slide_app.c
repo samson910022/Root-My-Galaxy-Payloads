@@ -1863,6 +1863,16 @@ void *slide_consumer_thread(void *arg __attribute__((unused))) {
     int tid = atomic_load(&slide_waiter_tid);
 #endif
 
+    if (tid <= 0) {
+      pr_info("slide sched skip tid=%d calls=%d seq=%d; waiter not published\n",
+              tid, atomic_load(&slide_consume_calls), seq);
+      atomic_store(&slide_consume_stop, 1);
+      while (atomic_load(&slide_consume_go)) {
+        __asm__ volatile("yield" ::: "memory");
+      }
+      return NULL;
+    }
+
     if (seq == 1) {
       slide_apply_route_fine_delay();
     }
@@ -1871,9 +1881,17 @@ void *slide_consumer_thread(void *arg __attribute__((unused))) {
     int entered = atomic_load(&slide_consume_enter_sched) + 1;
     atomic_store(&slide_consume_enter_sched, entered);
     atomic_store(&slide_consume_calls, calls + 1);
+    /* Triage-only: undefined by default so release has no log/timing perturbation. */
+#if defined(SLIDE_SCHED_DIAG) && SLIDE_SCHED_DIAG
+    pr_info("slide sched fire tid=%d calls=%d seq=%d\n", tid, calls, seq);
+#endif
     *errno_ptr = 0;
     long ret = sched_setattr_tid(tid, (calls % 19) + 1);
     int saved_errno = *errno_ptr;
+#if defined(SLIDE_SCHED_DIAG) && SLIDE_SCHED_DIAG
+    pr_info("slide sched fired tid=%d ret=%ld errno=%d\n", tid, ret,
+            saved_errno);
+#endif
 #if defined(SLIDE_SYNC_PSELECT_SYSCALL) && SLIDE_SYNC_PSELECT_SYSCALL
     pr_info("slide pselect blocked ready=%d ready_usec=%zu ready_wchan=%s "
             "guard=%d guard_usec=%zu guard_wchan=%s age_usec=%llu tid=%d\n",
