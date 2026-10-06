@@ -1863,6 +1863,16 @@ void *slide_consumer_thread(void *arg __attribute__((unused))) {
     int tid = atomic_load(&slide_waiter_tid);
 #endif
 
+    if (tid <= 0) {
+      pr_info("slide sched skip tid=%d calls=%d seq=%d; waiter not published\n",
+              tid, atomic_load(&slide_consume_calls), seq);
+      atomic_store(&slide_consume_stop, 1);
+      while (atomic_load(&slide_consume_go)) {
+        __asm__ volatile("yield" ::: "memory");
+      }
+      return NULL;
+    }
+
     if (seq == 1) {
       slide_apply_route_fine_delay();
     }
