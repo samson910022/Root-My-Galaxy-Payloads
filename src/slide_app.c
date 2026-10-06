@@ -1871,9 +1871,12 @@ void *slide_consumer_thread(void *arg __attribute__((unused))) {
     int entered = atomic_load(&slide_consume_enter_sched) + 1;
     atomic_store(&slide_consume_enter_sched, entered);
     atomic_store(&slide_consume_calls, calls + 1);
+    pr_info("slide sched fire tid=%d calls=%d seq=%d\n", tid, calls, seq);
     *errno_ptr = 0;
     long ret = sched_setattr_tid(tid, (calls % 19) + 1);
     int saved_errno = *errno_ptr;
+    pr_info("slide sched fired tid=%d ret=%ld errno=%d\n", tid, ret,
+            saved_errno);
 #if defined(SLIDE_SYNC_PSELECT_SYSCALL) && SLIDE_SYNC_PSELECT_SYSCALL
     pr_info("slide pselect blocked ready=%d ready_usec=%zu ready_wchan=%s "
             "guard=%d guard_usec=%zu guard_wchan=%s age_usec=%llu tid=%d\n",
