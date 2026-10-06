@@ -38,7 +38,7 @@ historical v3.3.0 no-patch-text Phase-D candidate has one successful full-chain
 Shizuku app run on SM-S9210 (2026-10-03); Manager UI recognition, resetprop
 regressions, repeatability, and reboot persistence remain pending before
 changing the feed. See the
-[candidate hardware record](docs/SM-S9210-S9210ZHS6DZG1.md#kernelsu-v330-candidate-hardware-validation-2026-10-03).
+  [candidate hardware record](docs/SM-S9210-S9210ZHS6DZG1.md#v330-candidate-hardware-validation-2026-10-03).
 
 Schema version 3 keeps each exploit and KernelSU artifact once. Its flat
 `models` and `kernelVersions` arrays define runtime compatibility. See

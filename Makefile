@@ -11,8 +11,8 @@ TARGET ?= pa3q-S938NKSUACZF1
 # Sanitize & freeze (must precede ANY $(VAR) expansion):
 # command-line/env vars are recursive by default, so $(shell ...) would run
 # during parsing before any check sees it. Inspect raw values first.
-TARGET_RAW := $(value TARGET)
-API_RAW := $(value API)
+override TARGET_RAW := $(value TARGET)
+override API_RAW := $(value API)
 ifneq ($(findstring $,$(TARGET_RAW)),)
 $(error Invalid TARGET: must not contain $$)
 endif
@@ -45,6 +45,9 @@ endif
 # metachars (;,`,|,…) in flags remain the caller's responsibility — flags are
 # trusted build inputs (a caller who can pass arbitrary flags can already run
 # arbitrary commands without make).
+# Residual: any other CLI/env name (e.g. FOO_BAR=...) is still exported and
+# expanded at recipe time; wrappers must not forward untrusted names.
+# `make -n` is unaffected by this vector (no recipes run).
 ifneq ($(findstring $,$(value TARGET_CFLAGS)),)
 $(error Invalid TARGET_CFLAGS: must not contain $$)
 endif
@@ -107,12 +110,12 @@ endif
 
 # Validate TARGET with pure-make checks (no shell: avoids echo injection).
 # Allowed: single word matching ^[A-Za-z0-9._-]+$.
-SQ := '
-HASH := \#
-LP := (
-RP := )
-EMPTY :=
-SPACE := $(EMPTY) $(EMPTY)
+override SQ := '
+override HASH := \#
+override LP := (
+override RP := )
+override EMPTY :=
+override SPACE := $(EMPTY) $(EMPTY)
 ifeq ($(words $(TARGET)),1)
 else
 $(error Invalid TARGET "$(TARGET)": must be a single word)
@@ -124,7 +127,7 @@ endif
 ifneq ($(firstword $(filter -%,$(TARGET))),)
 $(error Invalid TARGET "$(TARGET)": must not start with -)
 endif
-TARGET_BAD := $(findstring /,$(TARGET))$(findstring \,$(TARGET))$(findstring $,$(TARGET))$(findstring `,$(TARGET))$(findstring ",$(TARGET))$(findstring $(SQ),$(TARGET))$(findstring ;,$(TARGET))$(findstring &,$(TARGET))$(findstring |,$(TARGET))$(findstring $(LP),$(TARGET))$(findstring $(RP),$(TARGET))$(findstring <,$(TARGET))$(findstring >,$(TARGET))$(findstring *,$(TARGET))$(findstring ?,$(TARGET))$(findstring [,$(TARGET))$(findstring ],$(TARGET))$(findstring {,$(TARGET))$(findstring },$(TARGET))$(findstring ~,$(TARGET))$(findstring !,$(TARGET))$(findstring $(HASH),$(TARGET))$(findstring %,$(TARGET))$(findstring :,$(TARGET))$(findstring =,$(TARGET))$(findstring +,$(TARGET))$(findstring @,$(TARGET))$(findstring ^,$(TARGET))$(findstring $(SPACE),$(TARGET))
+override TARGET_BAD := $(findstring /,$(TARGET))$(findstring \,$(TARGET))$(findstring $,$(TARGET))$(findstring `,$(TARGET))$(findstring ",$(TARGET))$(findstring $(SQ),$(TARGET))$(findstring ;,$(TARGET))$(findstring &,$(TARGET))$(findstring |,$(TARGET))$(findstring $(LP),$(TARGET))$(findstring $(RP),$(TARGET))$(findstring <,$(TARGET))$(findstring >,$(TARGET))$(findstring *,$(TARGET))$(findstring ?,$(TARGET))$(findstring [,$(TARGET))$(findstring ],$(TARGET))$(findstring {,$(TARGET))$(findstring },$(TARGET))$(findstring ~,$(TARGET))$(findstring !,$(TARGET))$(findstring $(HASH),$(TARGET))$(findstring %,$(TARGET))$(findstring :,$(TARGET))$(findstring =,$(TARGET))$(findstring +,$(TARGET))$(findstring @,$(TARGET))$(findstring ^,$(TARGET))$(findstring $(SPACE),$(TARGET))
 # NOTE: comma is shell-harmless and would only produce a nonexistent
 # src/targets/... path; space is already rejected by the words check above.
 ifneq ($(TARGET_BAD),)
@@ -139,7 +142,7 @@ endif
 ifneq ($(words $(API)),1)
 $(error Invalid API "$(API)": must be a single word)
 endif
-API_DIGITS := $(subst 0,,$(subst 1,,$(subst 2,,$(subst 3,,$(subst 4,,$(subst 5,,$(subst 6,,$(subst 7,,$(subst 8,,$(subst 9,,$(API)))))))))))
+override API_DIGITS := $(subst 0,,$(subst 1,,$(subst 2,,$(subst 3,,$(subst 4,,$(subst 5,,$(subst 6,,$(subst 7,,$(subst 8,,$(subst 9,,$(API)))))))))))
 ifneq ($(API_DIGITS),)
 $(error Invalid API "$(API)": must contain only digits 0-9)
 endif
@@ -158,7 +161,7 @@ endif
 ifneq ($(firstword $(filter -%,$(OUTDIR))),)
 $(error Refusing to use OUTDIR "$(OUTDIR)" starting with -)
 endif
-OUTDIR_BAD := $(findstring \,$(OUTDIR))$(findstring $,$(OUTDIR))$(findstring `,$(OUTDIR))$(findstring ",$(OUTDIR))$(findstring $(SQ),$(OUTDIR))$(findstring ;,$(OUTDIR))$(findstring &,$(OUTDIR))$(findstring |,$(OUTDIR))$(findstring $(LP),$(OUTDIR))$(findstring $(RP),$(OUTDIR))$(findstring <,$(OUTDIR))$(findstring >,$(OUTDIR))$(findstring *,$(OUTDIR))$(findstring ?,$(OUTDIR))$(findstring [,$(OUTDIR))$(findstring ],$(OUTDIR))$(findstring {,$(OUTDIR))$(findstring },$(OUTDIR))$(findstring ~,$(OUTDIR))$(findstring !,$(OUTDIR))$(findstring $(HASH),$(OUTDIR))$(findstring %,$(OUTDIR))$(findstring :,$(OUTDIR))$(findstring =,$(OUTDIR))$(findstring +,$(OUTDIR))$(findstring @,$(OUTDIR))$(findstring ^,$(OUTDIR))$(findstring $(SPACE),$(OUTDIR))
+override OUTDIR_BAD := $(findstring \,$(OUTDIR))$(findstring $,$(OUTDIR))$(findstring `,$(OUTDIR))$(findstring ",$(OUTDIR))$(findstring $(SQ),$(OUTDIR))$(findstring ;,$(OUTDIR))$(findstring &,$(OUTDIR))$(findstring |,$(OUTDIR))$(findstring $(LP),$(OUTDIR))$(findstring $(RP),$(OUTDIR))$(findstring <,$(OUTDIR))$(findstring >,$(OUTDIR))$(findstring *,$(OUTDIR))$(findstring ?,$(OUTDIR))$(findstring [,$(OUTDIR))$(findstring ],$(OUTDIR))$(findstring {,$(OUTDIR))$(findstring },$(OUTDIR))$(findstring ~,$(OUTDIR))$(findstring !,$(OUTDIR))$(findstring $(HASH),$(OUTDIR))$(findstring %,$(OUTDIR))$(findstring :,$(OUTDIR))$(findstring =,$(OUTDIR))$(findstring +,$(OUTDIR))$(findstring @,$(OUTDIR))$(findstring ^,$(OUTDIR))$(findstring $(SPACE),$(OUTDIR))
 ifneq ($(OUTDIR_BAD),)
 $(error Refusing to use OUTDIR "$(OUTDIR)": must match ^[A-Za-z0-9._/-]+$$)
 endif
@@ -170,6 +173,7 @@ else
 APP_TARGET_CFLAGS :=
 endif
 ifeq ($(TARGET),a53x-A536EXXSNGZG3)
+# a53x uses a fixed toolchain API=31 (any CLI-passed API is overridden).
 override API := 31
 endif
 
@@ -177,7 +181,7 @@ override TARGET_HEADER := src/targets/$(TARGET)/target.h
 override TARGET_INCLUDE := targets/$(TARGET)/target.h
 # ANDROID_NDK_HOME may arrive from CLI/env as a recursive variable;
 # reject make expansion before it is ever expanded, then freeze.
-NDK_RAW := $(value ANDROID_NDK_HOME)
+override NDK_RAW := $(value ANDROID_NDK_HOME)
 ifneq ($(findstring $,$(NDK_RAW)),)
 $(error Invalid ANDROID_NDK_HOME: must not contain $$)
 endif
@@ -336,3 +340,4 @@ help:
 	@echo "Targets: all release stable clean distclean info help"
 	@echo "  TARGET=<profile> (default: $(TARGET))  API=<level> (default: $(API))"
 	@echo "  OUTDIR=<dir> (default: build/\$$(TARGET))"
+	@echo "  NOTE: a53x-A536EXXSNGZG3 pins API=31 (fixed toolchain)"

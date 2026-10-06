@@ -13,3 +13,6 @@ boot.img*
 vmlinux*
 *.btf
 live-FZG1-config.gz
+.venv/
+.DS_Store
+*.tmp
