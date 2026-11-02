@@ -447,3 +447,151 @@ different kernel, different table.
   fops full-table audit + `owner==0` (`fops.c:39-96,412,519`), configfs
   `ERANGE` (`fops.c:275`, `util.c:2808`), pipe same-page + `is_direct`
   checks (`pipe.c`, `fops.c`, `root.c`).
+
+## 8. S3 build-attempt record + static re-convergence (2026-11-02, no device)
+
+S3 ran exactly the two commands below. No `target.h` value was changed,
+no feed/KSU file touched, nothing committed.
+
+### 8.1 `make info` — PASS
+
+```sh
+make TARGET=e1q-S9210ZHU6EZIF \
+  ANDROID_NDK_HOME=/home/samson1357924/Android/Sdk/ndk/29.0.14206865 info
+```
+
+Output (exit 0):
+
+```text
+TARGET=e1q-S9210ZHU6EZIF
+APP_TARGET_CFLAGS=
+TARGET_CC=/home/samson1357924/Android/Sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang
+PRELOAD=build/e1q-S9210ZHU6EZIF/cve-2026-43499
+APP_PRELOAD=build/e1q-S9210ZHU6EZIF/cve-2026-43499-app.so
+APP_RELEASE=build/e1q-S9210ZHU6EZIF/cve-2026-43499-app.release.so
+APP_STABLE=build/e1q-S9210ZHU6EZIF/cve-2026-43499-app.stable.so
+ROOT_HELPER=build/e1q-S9210ZHU6EZIF/cve-2026-43499-root
+```
+
+`info` only prints paths — it never compiles `target.h`, so the two
+`TODO(offsets)` interlocks are (correctly) silent here.
+
+### 8.2 `make release` — FAIL (fail-closed, both interlocks fire)
+
+```sh
+make TARGET=e1q-S9210ZHU6EZIF \
+  ANDROID_NDK_HOME=/home/samson1357924/Android/Sdk/ndk/29.0.14206865 release
+```
+
+Result: exit 2, no `.so` emitted. The full compiler errors (verbatim):
+
+```text
+src/util.c:1807:28: error: use of undeclared identifier 'TODO_offsets_SKB_DATA_DELTA_UNMEASURED'
+ 1807 |   intptr_t payload_delta = SKB_DATA_DELTA;
+       |                            ^
+src/targets/e1q-S9210ZHU6EZIF/target.h:55:25: note: expanded from macro 'SKB_DATA_DELTA'
+   55 | #define SKB_DATA_DELTA (TODO_offsets_SKB_DATA_DELTA_UNMEASURED)
+      |                         ^
+1 error generated.
+src/slide_app.c:894:10: error: use of undeclared identifier 'TODO_offsets_PSELECT_WORD_SHIFT_UNMEASURED'
+  894 |   return SLIDE_PSELECT_WORD_SHIFT + waiter_word;
+       |          ^
+src/targets/e1q-S9210ZHU6EZIF/target.h:77:34: note: expanded from macro 'SLIDE_PSELECT_WORD_SHIFT'
+   77 | #define SLIDE_PSELECT_WORD_SHIFT TODO_offsets_PSELECT_WORD_SHIFT_UNMEASURED
+      |                                  ^
+1 error generated.
+make: *** [Makefile:299: build/e1q-S9210ZHU6EZIF/cve-2026-43499-app.release.so] Error 1
+```
+
+Interlock trigger evidence:
+
+- `SKB_DATA_DELTA` blows up in `src/util.c:1807`
+  (`prepare_skb_payload`, `payload_delta = SKB_DATA_DELTA`).
+- `SLIDE_PSELECT_WORD_SHIFT` blows up in `src/slide_app.c:894`
+  (`slide_pselect_global_word`, `return SLIDE_PSELECT_WORD_SHIFT +
+  waiter_word`).
+- Two independent translation units refuse to compile → fail-closed
+  proven: there is NO code path that can silently ship a guessed value.
+  (`common.h:59-60` has a `-0xe80` fallback, but the explicit
+  `target.h:55` definition shadows it, so the fallback can never mask
+  the interlock.)
+
+### 8.3 Static re-convergence (no guessing; bounds only)
+
+Re-disassembled from the retained EZIF ELF
+(`/mnt/240G_SSD/opencode_tmp/EZIF_work/`, NDK-r29 `llvm-objdump`).
+Symbols: `core_sys_select @0x3c3d64`, `do_select @0x3c4160` (static;
+there is NO `do_pselect` symbol on this 6.1 kernel — the pselect path
+is `__arm64_sys_pselect6 @0x3c4b2c` → `core_sys_select` →
+`do_select`).
+
+`SLIDE_PSELECT_WORD_SHIFT`:
+
+- `PSELECT_ROUTE_NFDS = 320` (`common.h:157`) → 320/64 = 5 words/set,
+  15-word in/out/ex array (`slide_app.c:888-918`,
+  `slide_pselect_words_per_set`, `slide_pselect_put_global_word`).
+- EZIF `core_sys_select` frame is `0x1c0`
+  (`sub sp, sp, #0x1c0`); on-stack copies land at `[sp+0x50, +0x78,
+  +0xa0)` for nfds=320 (`add x23, sp, #0x50` stack-buffer path,
+  `get_fd_set`/`set_fd_set` triplets, 6 `memset`s + `bl do_select`).
+- Compact waiter (`COMPACT_RT_MUTEX_WAITER=1`, `target.h:65`) is 11
+  qwords (words 0–10: tree_pc/right/left, pi_pc/right/left, task, lock,
+  wake_state+prio, deadline, ww_ctx; `slide_app.c:1000-1051`).
+- `slide_pselect_global_word = SHIFT + waiter_word` (`slide_app.c:893`);
+  waiter word 10 must still land inside the 15-word array ⇒ SHIFT ∈
+  {0..4}. Same bound as S2 §7.8 — re-verified, not narrowed further.
+- Which copied qword overlaps waiter qword zero depends on the
+  runtime stack/register contents at `pselect` entry and is only
+  observable on device. In-repo pineapple 6.1 evidence shows all of
+  {0, 3, 4} occur (essi-family `0`, DZG1/S9280 `3`, dm3q-FZG1 `4`),
+  so no value can be inferred.
+- Missing experiment that fixes it: on an SM-S9210 EZIF device, run a
+  `SLIDE_ONLY` dry-run sweeping SHIFT over {0..4} (nothing else
+  changed) and score the `slide-kaslr-ok` rate per value; accept only
+  the value with unanimous per-boot agreement that also passes the
+  64-KiB-alignment + P0-range checks (`slide_app.c` commit path).
+  Until then the interlock stays.
+
+`SKB_DATA_DELTA`:
+
+- Meaning: `payload_base = skb base + SKB_DATA_DELTA`
+  (`util.c:1807-1813`); it anchors every derived address
+  (`fake_lock = payload_base + LOCK_OFF`, `fake_task`, `fake_fops`,
+  bank slots; `util.c:1876-1912`) and `slide_bank_payload_base`.
+- In-repo pineapple 6.1 values diverge: `-0xe80` (DZG1, essi-family,
+  most e1x) vs `-0x1000` (dm3q-FZF5, e1s-FZE1/FZF3-family, e2s, r12s).
+  `-0xe80` = fragment-biased data start (`P0_ORACLE_GATE_PAGE_OFF =
+  0x0e80`, `SKB_FRAG_BIAS = 0`); `-0x1000` = full-page interpretation
+  (cf. `util.c:2073` FOPS mirror comment). Which one the EZIF allocator
+  path yields is a runtime reclaim property, not in the ELF/BTF.
+- Missing experiment that fixes it: on device, reclaim with each
+  candidate and check `pipe_cache_gate_ok` +
+  `pipe_reclaim_cache_gate`, then `cfi read` length/`ENOTTY` and the
+  slab `memcmp(readback)` `restored_ok` (`util.c`, `pipe.c`). A
+  zero-length read (`len 0` / `ENOTTY`) means wrong geometry, not
+  "retry harder" (§4). Accept only the delta whose reclaim lands on
+  the EZIF pipe slab cache with clean restore.
+
+### 8.4 Pending on-device measurement list (all BLOCKING for release)
+
+- [ ] SHIFT sweep {0..4} → `slide-kaslr-ok` rate + unanimous per-boot
+  agreement + align/range checks (§8.3).
+- [ ] DELTA A/B (`-0xe80` vs `-0x1000`) → pipe reclaim gate + cfi
+  read/restore matrix (§8.3).
+- [ ] Tracefs `id`-file read (offline math says 106; device file
+  authoritative), per-boot caller-minus-offset 64-KiB alignment +
+  P0-range verification.
+- [ ] `P0_KERNEL_PHYS_LOAD` linear-map self-consistency through the
+  full chain (S2 §7.6 evidence recorded, hardware confirmation open).
+- [ ] Full hardware chain (tracefs slide → fops → cfi → phys → root
+  umh → pipe → KernelSU late-load → granted `su`) + repeatability /
+  reboot matrix (S6 scope).
+
+### 8.5 Verdict
+
+Without a physical SM-S9210 EZIF device, S3 CANNOT produce a final
+release. That is the designed outcome, not a failure: the two
+compile-time interlocks exist precisely so that no `.so` can be built
+with a guessed SHIFT/DELTA (a wrong value mis-slides or panics the
+target). Status = **BLOCKING on EZIF hardware**. S4/S5/S6 remain gated
+until §8.4 is measured on device.
