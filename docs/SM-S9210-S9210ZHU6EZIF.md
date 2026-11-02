@@ -1186,3 +1186,73 @@ leg re-proven (two consecutive gated runs, zero panics, vs four blind-flip
 panics ungated); fail-open leg (HIT → writer) still unobserved. Chain root
 still ONLY from boot `8ae3860a` run 1. Verification items (a)–(e) unrunnable
 (never entered writer); Manager skipped per protocol.
+
+### 9.13 Post-trigger gate relocation — BLOCKING (worker verdict, static only, no device run)
+
+Parent task: move the gate from pre-trigger to post-trigger pre-flip —
+after `app_trigger_fops_slide_route()` returns, before the misc_fops global
+write (flip), with the flip write point asserted to be inside
+`try_cfi_stage` (`src/fops.c`). Verdict: **the asserted flip write point
+does not exist; clean insertion is structurally impossible. No code
+changed, nothing committed.**
+
+Flip-point hunt (exhaustive, `APP_PHYS_P0_ORACLE=1` build = EZIF release):
+
+- The ONLY `fake_fops → ASHMEM_MISC_FOPS` write is performed by the kernel
+  itself during the PI-requeue race INSIDE the trigger:
+  `app_trigger_fops_slide_route` (`src/slide_app.c:2442`, EZIF takes the
+  non-`APP_REQUIRE_FRESH_P0_SESSION` leg) → `slide_trigger_physical_state_report`
+  (`src/slide_app.c:2256`, forks a child) → `slide_child_trigger_write`
+  (`src/slide_app.c:2168`, waiter pselect race). Trigger returning 1 means
+  the flip was already ATTEMPTED (write window opened in-kernel).
+- `try_cfi_stage` (`src/fops.c:344-641`) contains ZERO flip writes. All
+  `misc_fops` writes found by full-tree grep: `src/fops.c:486-487` writes
+  back `original_fops = canon_addr(ASHMEM_FOPS)` (production restore) and
+  `src/fops.c:627-628` writes back `data_addr(ASHMEM_FOPS)` (fail-path
+  restore). No userspace write of `fake_fops` into `misc_fops` exists
+  anywhere in `src/`.
+- Consequence: a gate "after trigger returns, before the flip" cannot be
+  built — by trigger-return the flip has happened (or panicked). Gating
+  inside `try_cfi_stage` before `fops.c:486` would gate the RESTORE, not
+  the flip. The 3× PI panics in history occurred inside the trigger race
+  itself and are unreachable by any post-trigger gate.
+
+Bonus finding (source-verified, no guessing): the wanted post-trigger 232 B
+verification ALREADY exists — `audit_fake_fops_table` (`src/fops.c:39-88`,
+same `FOPS_SHOW_FDINFO_OFF + 8 = 232` span, all-slot compare incl.
+`FOPS_IOCTL_OFF`) runs as `try_cfi_stage`'s second check
+(`src/fops.c:412`), right after the `misc_fops == fake_fops` readback
+(`src/fops.c:361-363`, the post-trigger read the evidence cites as
+working). What EZIF actually lacks is only the fresh-page RETRY loop: it
+does not define `APP_REQUIRE_FRESH_P0_SESSION`, so `src/main.c:594-683`
+is compiled out and production walks the gated pre-trigger block
+(`src/main.c:686-780`).
+
+Proposed alternative (NOT implemented — needs parent auth because it
+reverses the safety contract): reorder the EZIF block to
+trigger → post-trigger 232 B table gate-read → `try_cfi_stage`, else
+userspace RESTORE of `misc_fops` (mirror `fops.c:622-628`, mandatory —
+trigger=1 may have already flipped) + fresh `prepare_good_kernel_page`
+retry ×5, 5 misses → clean `return 1`. Caveats: "no flip on miss" becomes
+"restore on miss" (flip precedes gate), and trigger-first re-exposes the
+PI-panic leg (current gated builds: 0 flips / 0 panics across 48 attempts;
+ungated history: 4 blind-flip panics). Do NOT implement without explicit
+authorization.
+
+Baseline rebuild (no source change; NDK r29
+`/home/samson1357924/Android/Sdk/ndk/29.0.14206865`, `make release`
+exit 0 both): e1q `104128 B`, SHA-256
+`e25561fc85b1021bffecbe424da2168976cd8c47814fcf3867f80760ddf5d720`
+(= §9.12 gate-v2 artifact, `pre-flip gate` strings ×5); e3q control
+`104128 B`, SHA-256
+`955d79d75bd72816245595dcb14f7a829f6b5598f1fe5ef4b5b00e348ee8a3f2`,
+`pre-flip gate` strings ×0 (isolation intact, 29 targets untouched).
+
+Lessons converged (for any future gate work): (1) S2 structural diffs must
+be followed by a probe proving the new macro actually takes effect in the
+compiled path (preprocessed `-E` check like §9.10, not just `#define`
+presence); (2) ×5 dead-code lesson — retry budgets must live on the path
+the target actually walks (`#else` single-shot hardcodes `<= 1`,
+`src/main.c:782`), name the loop bound from the macro or comment why not;
+(3) reboot → repush → reverify hashes pre-fire; (4) single boot single
+round; (5) raw log archived with SHA (per §9.11/§9.12 precedent).
