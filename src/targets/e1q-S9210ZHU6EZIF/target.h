@@ -93,7 +93,15 @@
 #if defined(APP_PAYLOAD) && APP_PAYLOAD
 #define ROUTE_WAIT_SECONDS 8
 #define PSELECT_ENTER_DELAY_USEC 50000
-#define SLIDE_PSELECT_TIMEOUT_NSEC 100000000L
+/* NanoTurtle v3.5.4 tuned: STACK_WRITER_DELAY_USEC=125000 (env override at
+ * run time) needs a pselect timeout comfortably above the delay; 100ms
+ * (100000000L) is narrower than the 125ms writer delay and collapses the
+ * race window. Keep coupled: any delay change must re-check this timeout. */
+#define SLIDE_PSELECT_TIMEOUT_NSEC 500000000L
+/* NanoTurtle v3.5.4 tuned: fresh fops page x5 (main.c:599 hook). Same-core
+ * 6.1.162 measured: 125ms delay + fresh-page x5 = 67%; 50ms too narrow,
+ * 300ms panics. Timing knob only — geometry/offsets untouched. */
+#define APP_FOPS_FRESH_PAGE_ATTEMPTS 5
 #define SLIDE_KSNITCH_APPENDED_FUTEXES 2048
 #define SLIDE_KSNITCH_REPEAT_MEASUREMENT 64
 #define SLIDE_KSNITCH_AVERAGE 8

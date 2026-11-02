@@ -1007,3 +1007,51 @@ Status vs §9.5/§9.6: chain root still proven ONLY from boot `8ae3860a` run 1;
 now THREE fops-stage panics vs one root (run 2 post-load re-invoke, s3verify +
 retry2 fresh-boot pre-root) — fops/PI window is the hot spot, probabilistic
 exploit confirmed. Control-channel/`su`/Manager/resetprop/repeatability still TODO.
+
+### 9.9 NanoTurtle-v3.5.4-tuned single round on boot `0aec734f` (2026-11-03) — PANIC pre-root, NEW CFI signature
+
+Timing-only `target.h` retune (geometry/offsets/SHIFT/DELTA/MM untouched),
+single round, no second exploit. Full record:
+`/mnt/240G_SSD/opencode_tmp/s3_tuned125x5/verdict.md`.
+
+- Knobs: `+ #define APP_FOPS_FRESH_PAGE_ATTEMPTS 5` (`main.c:599` hook);
+  `SLIDE_PSELECT_TIMEOUT_NSEC` 100000000L → 500000000L (125ms writer delay
+  needs timeout >100ms; coupled warning in comments).
+- NDK r29 `release` → exit 0; `.so` still **104128 B**, new SHA-256
+  `efc8b49caa9129539645689479eaa55b7aa0059e621997beee375a8a1a86a538`
+  (old `9c6cf160…` retired). Root runner unchanged (27264 B, `c49a6557…`).
+- Idle gate on unchanged boot `0aec734f`: up 30–32 min, load 3.34→1.71,
+  `boot_completed=1`, no `kernelsu`, `Enforcing`.
+- Push + preset verified on device pre-fire (size/ELF/SHA-256/md5 all match);
+  `.ksud-stage` + `ksud-s25u-kdp` preset, stale `temp_su.sock` still MAC-denied.
+- Run (ONE invocation, `ATTEMPTS=24`, `EXPLOIT_ATTEMPT_TIMEOUT_SEC=300`,
+  `P0_ATTEMPT_TIMEOUT_SEC=180`, `STACK_WRITER_DELAY_USEC=125000`): attempt
+  **1/24**, slide `0x180000` (quorum `best=00180000 hits=13`, unanimous; 4th
+  distinct per-boot slide), `configured_delay=125000 consume_delay=125000`
+  confirmed, `fops-page-held` → pi stages → `writer-enter` → transport died.
+  No root, no late-load.
+- Panic `#133` (`dumpstate_lastkmsg_133_20261103_000337_KP.log.gz`, 652059 B):
+  **NEW signature** — `CFI failure at __arm64_sys_ioctl+0xa0/0xe4 (target:
+  0xfffffffe239bdd40; expected type: 0xe01408cd)` → `Oops - CFI` → panic,
+  KTIME 1679.98, no `kernelsu` (pre-load, pre-root). First three panics were
+  PI/futex-path (`refcount_warn_saturate ← rt_mutex_adjust_prio_chain`) or
+  post-load misc; tuned125 got PAST the PI window and died one stage later at
+  the ioctl call through the overwritten fops — but still no root.
+- Verification (a)–(e) unrunnable without a root session; no second round.
+  Shell-side only: `Enforcing` throughout, driver absent.
+- Storage rule hardened: the five files pushed 1–3 min pre-panic are now
+  ENTIRELY ABSENT (retry2's were zero-filled) — panic before f2fs writeback
+  has two faces. **After ANY panic-reboot, re-push + re-verify.**
+
+Boot对照:
+
+| Field | Before (exploit boot) | After |
+| --- | --- | --- |
+| boot_id | `0aec734f` | `55936f1a` |
+| uptime/load at session | 30–32 min, load 3.34→1.71, `boot_completed=1` | ~14 min, load 9.58 settling, `boot_completed=1` |
+| kernelsu module | absent (never loaded this boot) | absent (volatile) |
+| SELinux | Enforcing (never left Enforcing — no root) | Enforcing |
+
+Status vs §9.5/§9.6: chain root proven ONLY from boot `8ae3860a` run 1; now
+FOUR fops-stage panics vs one root. Control-channel/`su`/Manager/resetprop/
+repeatability still TODO.
