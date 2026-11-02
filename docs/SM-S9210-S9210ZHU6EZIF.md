@@ -10,17 +10,17 @@ Reference structure: [`SM-S9210-S9210ZHS6DZG1.md`](SM-S9210-S9210ZHS6DZG1.md).
 Procedure: [`PORTING.md`](PORTING.md).
 Feed rules: [`../README.md`](../README.md) + [`../support/README.md`](../support/README.md).
 
-## 1. Firmware identity (S0 declared, S1 to prove)
+## 1. Firmware identity (S1 proven 2026-11-02; offsets/KSU/validation still TODO)
 
 | Field | Value (S0) |
 | --- | --- |
 | Model | `SM-S9210` (China, e1q) |
 | Device codename | `e1q` |
-| Product name (expected) | `TODO(provenance): confirm from fota.zip / build.prop (DZG1 was \`e1qzhx\`)` |
+| Product name | `e1qzhx` (confirmed: `ro.product.system.name` / `ro.product.vendor.name` / `ro.product.bootimage.name` in fota.zip `SYSTEM/build.prop`, `VENDOR/build.prop`, ramdisk `build.prop`; vendor device `e1q`, board `pineapple`, ABI `arm64-v8a`, model `SM-S9210`) |
 | AP / PDA | `S9210ZHU6EZIF` |
 | CSC | `S9210OZS6EZIF` (OZS multi-CSC; this branch covers `TGY` + `BRI`. `CHC` belongs to a separate branch) |
 | CP / baseband | `S9210ZCU6EZIF` |
-| Four-part version (expected) | `S9210ZHU6EZIF/S9210OZS6EZIF/S9210ZCU6EZIF/S9210ZHU6EZIF` — `TODO(provenance): confirm via samloader \`check-update --model SM-S9210 --region TGY/BRI\`` |
+| Four-part version | `S9210ZHU6EZIF/S9210OZS6EZIF/S9210ZCU6EZIF/S9210ZHU6EZIF` — confirmed present in BOTH `samloader-rs check-update --model SM-S9210 --region BRI --all` and `--region TGY --all` (byte-identical transcripts, saved at `/mnt/240G_SSD/opencode_tmp/check-update_{BRI,TGY}.txt`). NOTE 2026-11-02: samloader-rs lists EZIF under "Previous Stable Versions"; latest is now `S9210ZHS6EZJ1/...` (ZHU->ZHS CSC flip, out of scope). Legacy `version.xml` (`curl -A Kies2.0_FUS .../firmware/BRI|TGY/SM-S9210/version.xml`) still reports EZIF as `<latest o="17">`. This branch pins the exact EZIF four-part above. |
 | Android version | `17` |
 | One UI version | `9` |
 | Build date | `2026-09-20` |
@@ -28,20 +28,59 @@ Feed rules: [`../README.md`](../README.md) + [`../support/README.md`](../support
 | Security patch level | `2026-09-05` |
 | Binary (bootloader) | `6` |
 | Regions in scope | `TGY` + `BRI` (OZS). `CHC` explicitly out of scope for this branch |
-| Kernel release | `TODO(kernel): read from \`uname -r\` / boot image (DZG1 was \`6.1.145-android14-11-33419968-abS9210ZHS6DZG1\`; do NOT reuse)` |
-| Build fingerprint | `TODO(provenance): read from \`meta-data/fota.zip\` (do NOT fabricate)` |
-| Build ID / changelist | `TODO(provenance): read from fota.zip build.prop` |
-| boot.img size / SHA-256 | `TODO(kernel): measure after S1 extract` |
-| kernel size / SHA-256 | `TODO(kernel): measure after S1 extract (boot header offset 0x08 size, slice at 0x1000)` |
-| vendor_boot.img size / SHA-256 | `TODO(kernel): measure after S1 extract` |
-| ARM64 Image text_offset / image_size / flags | `TODO(kernel): read from Image header` |
+| Kernel release | `6.1.162-android14-11-34343818-abS9210ZHU6EZIF` (from kernel `linux_banner` strings; also `6.1.162-android14-11-34343818-abS9210ZHU6EZIF SMP preempt mod_unload modversions aarch64` vermagic line; kernel build `#1 SMP PREEMPT Sun Sep 20 01:29:53 UTC 2026`, clang 17.0.2) |
+| Build fingerprint | `samsung/e1qzhx/qssi_64:17/CP2A.260605.016/S9210ZHU6EZIF:user/release-keys` (from fota.zip `SYSTEM/build.prop` `ro.system.build.fingerprint`) |
+| Build ID / changelist | Build ID `CP2A.260605.016`, display ID `CP2A.260605.016.S9210ZHU6EZIF`, changelist `34344539` (`ro.build.changelist`), build date `Sun Sep 20 10:29:28 KST 2026` (utc `1789867768`), SDK `37`, security patch `2026-09-05` (system + vendor agree), `ap-qb-id=115080882` (all from fota.zip `SYSTEM/build.prop` + `fota_info.txt`) |
+| boot.img size / SHA-256 | `100663296` bytes, SHA-256 `df431d623ef3efb39875cd28c1ee47cb0c2a99eee6563fe677f2be6ca5b80d4e` (header v4, magic `ANDROID!`, page 4096; retained at `/mnt/240G_SSD/opencode_tmp/EZIF_work/boot.img`) |
+| kernel size / SHA-256 | `38140416` bytes (`0x245fa00`, sliced at boot header offset `0x1000` with `kernel_size` u32le `@0x08`), SHA-256 `ce462331a8ef6c6c0ab94ac8ad4b9a3d6aea23a3455da929ea33621f8b6d351f` (retained at `/mnt/240G_SSD/opencode_tmp/EZIF_work/kernel`; byte-identical to fota.zip `BOOT/kernel` via `cmp`) |
+| vendor_boot.img size / SHA-256 | `100663296` bytes, SHA-256 `0397f376da4338c0f45bb9ca69b301c11af2a5d7b4f8b195ba2de760bc4ef613` (magic `VNDRBOOT`; retained at `/mnt/240G_SSD/opencode_tmp/EZIF_work/vendor_boot.img`) |
+| ARM64 Image text_offset / image_size / flags | `text_offset 0x0`, `image_size 0x2710000` (`40960000`), flags `0xa`, magic `ARMd` at `0x38` (Image header `@0x08/0x10/0x18` of the raw kernel slice) |
 | SELinux (device-measured) | `TODO(validation): record from device (\`getenforce\`, expected \`Enforcing\`)` |
 | tracefs event ID | `TODO(offsets): derive per PORTING.md §5 (DZG1 was 106; do NOT copy)` |
 
-Provenance gate (S1): `samloader-rs check-update --model SM-S9210 --region TGY`
-and `--region BRI` must both resolve to the four-part version above before any
-download. Download command, ZIP name, AP/BL/CSC file names, and byte sizes go
-in the S1 record. No download is performed in S0.
+Provenance gate (S1, completed 2026-11-02): `samloader-rs` (`samloader 2.2.0`,
+topjohnwu/samloader-rs, `cargo install samloader --locked`; no IMEI/serial
+needed, no `--resume` flag — resumes automatically unless `--force`) returned
+the EZIF four-part for BOTH `--region BRI` and `--region TGY` (byte-identical
+transcripts). Commands run verbatim:
+
+```sh
+samloader check-update --model SM-S9210 --region BRI --all --verbose
+samloader check-update --model SM-S9210 --region TGY --all --verbose
+samloader download --model SM-S9210 --region BRI \
+  --version "S9210ZHU6EZIF/S9210OZS6EZIF/S9210ZCU6EZIF/S9210ZHU6EZIF" \
+  --threads 8 --out-file /mnt/240G_SSD/opencode_tmp/S9210ZHU6EZIF_BRI.zip --verbose
+```
+
+Downloaded ZIP: `/mnt/240G_SSD/opencode_tmp/S9210ZHU6EZIF_BRI.zip`
+(`14297315137` bytes, SHA-256
+`f13f7ec5834266c957ef6dc694b54b88d90444886bdf6ed840a007b6a010cd24`).
+ZIP contents (5 entries): BL (`102553713` B), AP
+`AP_S9210ZHU6EZIF_S9210ZHU6EZIF_MQB115080882_REV00_user_low_ship_MULTI_CERT_meta_OS17.tar.md5`
+(`16215572603` B), CP (`83845230` B), HOME_CSC (`95662189` B), CSC (`95672424`
+B). AP tar deleted after extracting `boot.img.lz4` (`22159441` B),
+`vendor_boot.img.lz4` (`17157926` B), `meta-data/fota.zip` (`1297734735` B);
+fota.zip deleted after extracting `SYSTEM/build.prop`, `VENDOR/build.prop`,
+ramdisk `build.prop`, `fota_info.txt`, `BOOT/kernel`. Retained in
+`/mnt/240G_SSD/opencode_tmp/`: the ZIP, `EZIF_work/kernel`,
+`EZIF_work/boot.img`, `EZIF_work/vendor_boot.img`, the two `.lz4`, the four
+prop/txt files, and `check-update_{BRI,TGY}.txt`. No large file was committed
+to git (see `git status`).
+
+Extraction (PORTING.md §2 script, `python3` + `lz4.frame`): decompress
+`boot.img.lz4` → `boot.img`, read u32le `kernel_size` `@0x08` = `38140416`
+(`0x245fa00`), slice `boot[0x1000:0x1000+kernel_size]` → `kernel`.
+`BOOT/kernel` from fota.zip is byte-identical (`cmp` clean). Boot header:
+magic `ANDROID!`, version 4, page 4096.
+
+Full `linux_banner` (kernel strings):
+
+```text
+Linux version 6.1.162-android14-11-34343818-abS9210ZHU6EZIF (build-user@build-host) (Android (10087095, +pgo, +bolt, +lto, -mlgo, based on r487747c) clang version 17.0.2 (https://android.googlesource.com/toolchain/llvm-project d9f89f4d16663d5012e5c09495f3b30ece3d2362), LLD 17.0.2) #1 SMP PREEMPT Sun Sep 20 01:29:53 UTC 2026
+```
+
+Vermagic line: `6.1.162-android14-11-34343818-abS9210ZHU6EZIF SMP preempt
+mod_unload modversions aarch64`.
 
 ## 2. Differences vs DZG1 (`S9210ZHS6DZG1`, device-tested baseline)
 
@@ -51,12 +90,12 @@ DZG1 reference: [`SM-S9210-S9210ZHS6DZG1.md`](SM-S9210-S9210ZHS6DZG1.md)
 
 | Axis | DZG1 (baseline, proven) | EZIF (this port, S0) | S0 verdict |
 | --- | --- | --- | --- |
-| PDA / CSC / CP | `S9210ZHS6DZG1` / `S9210OZS6DZG1` / `S9210ZCS6DZG1` | `S9210ZHU6EZIF` / `S9210OZS6EZIF` / `S9210ZCU6EZIF` | Declared, S1 to prove |
+| PDA / CSC / CP | `S9210ZHS6DZG1` / `S9210OZS6DZG1` / `S9210ZCS6DZG1` | `S9210ZHU6EZIF` / `S9210OZS6EZIF` / `S9210ZCU6EZIF` | S1 proven (samloader BRI+TGY, ZIP+AP names) |
 | Android / One UI | 16 / 8.x (`BP4A.251205.006`, build 2026-07-10) | 17 / 9, build 2026-09-20, release 2026-10-21, patch 2026-09-05 | Declared; kernel/GKI generation may differ — never assume same offsets |
 | Binary | 6 (`ZHS6`) | 6 (`ZHU6`) | Same binary digit, still a different build — full re-audit required |
 | Regions | BRI sales, OZS multi-CSC | TGY + BRI OZS in this branch; CHC separate branch | Scope narrower than "all OZS"; feed `models` must reflect this in S6 |
-| Kernel image / SHA | `38005248` bytes, SHA-256 `c34386a0…` recorded | `TODO(kernel)` — MUST re-extract and re-hash | No reuse |
-| Kernel release / vermagic | `6.1.145-android14-11-33419968-abS9210ZHS6DZG1` | `TODO(kernel)` / `TODO(KSU)` — MUST re-read | No reuse; KSU `vermagic` must match exactly |
+| Kernel image / SHA | `38005248` bytes, SHA-256 `c34386a0…` recorded | `38140416` bytes (`0x245fa00`), SHA-256 `ce462331…` (S1 measured) | No reuse — values differ as expected |
+| Kernel release / vermagic | `6.1.145-android14-11-33419968-abS9210ZHS6DZG1` | `6.1.162-android14-11-34343818-abS9210ZHU6EZIF` / `TODO(KSU)` (S1 read banner; KSU rebuild pending) | No reuse; KSU `vermagic` must match exactly |
 | Audited offsets (`KMALLOC_CACHES`, `SLIDE_NFULNL_LOGGER_NAME`, `CALL_USERMODEHELPER_EXEC_WORK`, `SYSTEM_UNBOUND_WQ`, `INIT_TASK`, `ROOT_TASK_GROUP`, `SELINUX_ENFORCING`, `ASHMEM_*`, `ANON_PIPE_BUF_OPS`, logger objects, boot-id pointers, misc fops, tracefs caller) | All recorded in DZG1 doc + `src/targets/e1q-S9210ZHS6DZG1/target.h` | `TODO(offsets)` — every entry to be re-derived from EZIF `vmlinux.elf` + BTF per `PORTING.md` §3 | Copying `target.h` and renaming is FORBIDDEN (would boot-panic / mis-slide) |
 | BTF struct layouts (file_operations, page, task, rt_mutex_waiter, configfs, workqueue, selinux_state) | Match S9280 profile | `TODO(offsets)` — re-dump `bpftool btf dump ... format raw` + `format c` | No reuse without byte-level proof |
 | P0 table (`p0_fingerprint.h`, `P0_ORACLE_PROBE_OFFSET`, `P0_PHYS_OFFSET`, `P0_KERNEL_PHYS_LOAD`) | `0x1f0000` probe, `0x80000000` / `0x80080000`, 42 address words differ from S9280 | `TODO(offsets)` — regenerate all 32 slides × 8 qwords from EZIF raw kernel, 256-qword readback | Reuse across firmware is explicitly unsafe (cf. DZG1 §P0) |
@@ -73,11 +112,13 @@ Numbering follows `PORTING.md` §1–§9. S0 is this file only.
   S0–S6 plan + anti-panic list present; NO `src/targets/e1q-S9210ZHU6EZIF/`
   directory, NO `support/targets-v*.json` edit, NO binaries (`.so`/`.ko`/`zip`/`img`),
   NO fabricated SHA/offsets/vermagic. `git status` shows exactly one new file.
-- [ ] **S1 — provenance + extraction (PORTING.md §1–§2). ACCEPT:** samloader
-  four-part version transcript (TGY + BRI); download command + ZIP/AP/BL names;
-  `boot.img`/`kernel`/`vendor_boot.img` sizes + SHA-256; Image header fields;
-  fota.zip identity (fingerprint, model, SDK, page size); cleanup of multi-GB
-  ZIP/AP/BL/ELF/tmp per §9, raw `kernel` + provenance note retained.
+- [x] **S1 — provenance + extraction (PORTING.md §1–§2). DONE 2026-11-02:**
+  samloader four-part transcripts (TGY + BRI, identical); download command +
+  ZIP/AP names recorded in §1; `boot.img`/`kernel`/`vendor_boot.img` sizes +
+  SHA-256 + Image header measured; fota.zip identity (fingerprint, display ID,
+  build ID `CP2A.260605.016`, changelist, SDK 37, page size 4096) recorded;
+  AP tar + fota.zip deleted after use, raw `kernel` + ZIP + props retained in
+  `/mnt/240G_SSD/opencode_tmp/` (never committed).
 - [ ] **S2 — symbols + BTF + offsets (PORTING.md §3). ACCEPT:** `vmlinux-to-elf`
   + `llvm-nm` transcript; exactly-one raw BTF blob interval with header/section
   validation; `format raw` + `format c` dumps kept during work; every macro-use
@@ -188,12 +229,13 @@ re-verified against the EZIF target before S6 hardware runs.
   the helper retries plain `late-load` only when the module is not live after
   the ephemeral attempt (verify-gated). Keep until the CLI contract is fixed.
 
-## 5. TODO index (S0 exit criteria: all remain TODO)
+## 5. TODO index (S1 done: provenance/kernel resolved; offsets/KSU/validation remain TODO)
 
-- `TODO(provenance)`: samloader TGY/BRI transcripts, four-part version proof,
-  fota.zip fingerprint/build-ID/changelist, product name.
-- `TODO(kernel)`: boot/vendor_boot sizes + SHA-256, kernel slice size + SHA-256,
-  Image header, kernel release string, BTF interval, sboot phys-load proof.
+- [x] `TODO(provenance)` → DONE S1: samloader TGY/BRI transcripts, four-part
+  version proof, fota.zip fingerprint/build-ID/changelist, product name (§1).
+- [x] `TODO(kernel)` → DONE S1 (hashes/banner/header/fingerprint/display ID):
+  boot/vendor_boot sizes + SHA-256, kernel slice size + SHA-256, Image header,
+  kernel release string. Still open for S2: BTF interval, sboot phys-load proof.
 - `TODO(offsets)`: every `*_OFF` macro, BTF layouts, event ID, caller offset,
   pselect shift, bank/slab geometry, full P0 table + readback.
 - `TODO(KSU)`: pinned KSU version, Samsung patch record, `check_symbol`,
@@ -202,10 +244,10 @@ re-verified against the EZIF target before S6 hardware runs.
   KernelSU control-channel + manager evidence, repeatability/reboot/resetprop
   matrix, thermal/peak notes.
 
-## 6. S0 non-goals (explicitly NOT done)
+## 6. S0 non-goals (explicitly NOT done; S1 update: samloader + extract done)
 
-- No `samloader` query/download; no `lz4`/`tar` extraction; no
-  `vmlinux-to-elf`/`llvm-nm`/`bpftool` runs (cf. `PORTING.md` §1–§3).
+- S1 DONE: `samloader` query/download + `lz4`/`tar` extraction (cf. §1 record).
+  Still NOT done: `vmlinux-to-elf`/`llvm-nm`/`bpftool` runs (cf. `PORTING.md` §3).
 - No `src/targets/e1q-S9210ZHU6EZIF/` files (creating `target.h` by copying
   DZG1 is forbidden — it would mis-slide and panic).
 - No `support/targets-v*.json` edits (S6 only, after hardware proof).
