@@ -53,8 +53,15 @@
  * offline derivation exists from the EZIF ELF/BTF; filling -0xe80 here
  * would be a guess. S3/S6 must measure it on EZIF hardware. */
 #define SKB_DATA_DELTA (TODO_offsets_SKB_DATA_DELTA_UNMEASURED)
-#if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE
+/* MM_STRUCT_SZ 0x400 is unconditional: on-device slabinfo on EZIF
+ * (6.1.162) reads `mm_struct 1024 objsize, 32 objperslab, 8 pagesperslab`
+ * (32*1024=32768=ORDER3 exact). DZG1 (6.1.145) template kept 0x400 inside
+ * the STABLE_RACE guard (copied structure), but release builds take
+ * common.h default 0x500 without the flag, which mismatches stride and
+ * yields deterministic zero hits. Same unconditional-0x400 precedent as
+ * e3q/e2s. */
 #define MM_STRUCT_SZ 0x400
+#if defined(APP_S928_STABLE_RACE) && APP_S928_STABLE_RACE
 #define SLIDE_WAITER_CORE 6
 #endif
 
