@@ -1055,3 +1055,53 @@ Boot对照:
 Status vs §9.5/§9.6: chain root proven ONLY from boot `8ae3860a` run 1; now
 FOUR fops-stage panics vs one root. Control-channel/`su`/Manager/resetprop/
 repeatability still TODO.
+
+### 9.10 Pre-flip gate (S6 forensic fix; static only, no device run)
+
+Forensic verdict (§2, parent session): flip aiming is correct, source page is
+wrong — blind spray with zero readback; `×5` (`APP_FOPS_FRESH_PAGE_ATTEMPTS`,
+`main.c:599` hook) is dead code in this build because e1q does NOT define
+`APP_REQUIRE_FRESH_P0_SESSION`, so the fresh retry loop (`main.c:594-683`)
+is compiled out and production walks the `#else` single-shot path
+(`main.c:684-700`). Fix: verify the planted table is resident BEFORE the
+flip; enter `slide_trigger_physical_state` only on a hit, else release +
+fresh prepare (max 5); 5 misses -> clean `return 1` (never flips a blind
+table, never enters the writer).
+
+- Gate read: `configfs_read_once(fake_fops + FOPS_IOCTL_OFF, ...)` through a
+  freshly opened pre-flip ashmem fd (genuine `f_op`, name-blob path safe),
+  require `== text_addr(ASHMEM_IOCTL)`.
+- Expectation provenance (read, not guessed): spray plants
+  `FOPS_IOCTL_OFF = text_addr(ASHMEM_IOCTL)` (`put_fake_fops_table`,
+  `src/util.c:936`); `FOPS_LLSEEK_OFF` is planted as `fake_w0+0x18`
+  (`src/util.c:930-931`) and deliberately NOT gated, because
+  `repair_fake_fops_llseek` (`src/fops.c:269`, post-flip inside
+  `try_cfi_stage`) rewrites that slot to `NOOP_LLSEEK` — only the ioctl
+  slot is stable across re-prepares.
+- Retry mirrors the fresh-session loop: miss -> `prepare_good_kernel_page`
+  (`PAGE_PAYLOAD_FOPS`) again, no `reset_pipe_attempt` (that helper zeroes
+  `pipebuf_page_base` without rebuilding it, which would poison the bank
+  entries planted from `pipebuf_page_base` and the later pipe physrw).
+- `pr_warning` (not `pr_error`) on the 5-miss path: `pr_error` calls
+  `exit(-1)` (`src/kernelsnitch/utils.h`), which would skip the
+  `pipe_prepare_child` cleanup and violate the `return 1` contract.
+- Scope (hard constraint): `src/main.c` `#else` single-shot region only +
+  one macro `#define APP_FOPS_PREFLIP_GATE 1` in
+  `src/targets/e1q-S9210ZHU6EZIF/target.h`. No offsets/SHIFT/DELTA/MM/
+  PHYS_LOAD change; `src/fops.c` production logic untouched (repair order
+  verified by source reading — no adjustment needed).
+
+Isolation proof (other 29 targets byte-identical behavior):
+
+- Gate code is wrapped in `#if defined(APP_FOPS_PREFLIP_GATE) &&
+  APP_FOPS_PREFLIP_GATE`; only e1q defines it. The `#else` leg is the
+  original single-shot loop verbatim.
+- `make TARGET=e1q-S9210ZHU6EZIF release` → exit 0, 104128 B; gate strings
+  present in the `.so` (`pre-flip gate` ×5).
+- `make TARGET=e3q-S9280ZCS6DZF2 release` (unmodified macro) → exit 0,
+  104128 B; `pre-flip gate` strings absent (0); preprocessed
+  (`-DAPP_PAYLOAD=1 -E`) `run_exploit` tail still expands to
+  `start_p0_ref_keeper(); for (int attempt = 1; attempt <= 1; ...)`,
+  zero `gate_attempt` references. `-Wall -Wextra` clean on both.
+- No exploit run, no feed/KSU touched, nothing committed (working tree
+  only).

