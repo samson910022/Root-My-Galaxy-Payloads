@@ -1256,3 +1256,106 @@ the target actually walks (`#else` single-shot hardcodes `<= 1`,
 `src/main.c:782`), name the loop bound from the macro or comment why not;
 (3) reboot → repush → reverify hashes pre-fire; (4) single boot single
 round; (5) raw log archived with SHA (per §9.11/§9.12 precedent).
+
+### 9.14 Ungated tuned build (`efc8b49c`) full-chain on boot `55936f1a` (2026-11-03) — PANIC attempt 1/24, NEW CFI lseek signature #134
+
+Same boot `55936f1a` as §9.11/§9.12 (no reboot in between), single round,
+no second exploit. This round fired the §9.9 NanoTurtle-tuned build WITHOUT
+any gate (`efc8b49c…`, 104128 B) — device copy carries 0 `pre-flip gate`
+strings (read-only `strings` check, binary never executed by this worker).
+Full local record: `/mnt/240G_SSD/opencode_tmp/s3_lottery2/`
+(`lotto2_boot55936f1a.log` + `dumpstate_lastkmsg_134_…_KP.log.gz` +
+`dumpstate_latest_after_lotto2.log.gz` + `lastkmsg134/` extract).
+
+- Build identity (pre-fire, hashes match local `build/` exactly — no
+  rebuild, `target.h` untouched): `lotto2_app.release.so` SHA-256
+  `efc8b49caa912953…a86a538` (= §9.9 tuned125 artifact); `lotto2_root`
+  `c49a655708be…` (27264 B, §9.6 runner); `lotto2_ksud-331`
+  `fde99b5a…` (5065680 B, staged but never consumed).
+- Run (ONE invocation, `ATTEMPTS=24`, TIMEOUT 300/180): attempt **1/24**,
+  pid 16226, `slide-kaslr-ok source=tracefs base=ffffffc008170000
+  slide=0x170000` (quorum `best=00170000 hits=17 second=0`, unanimous;
+  same per-boot slide as the two gated runs) → `fops-page-held`
+  checkpoint → transport died. No `exploit completed`, no root umh, no
+  late-load. Durable log `lotto2.log` 4760 B, SHA-256
+  `63cd2904097a…` — pulled read-only from `/data/local/tmp` AFTER the
+  reboot; byte-identical to the pre-reboot local copy (reboot did NOT
+  wipe `/data/local/tmp` this round: `.so`/root/ksud/log all present).
+- Panic `#134` (`dumpstate_lastkmsg_134_20261103_030839_KP.log.gz`,
+  642053 B): **NEW signature** —
+  `CFI failure at __arm64_sys_lseek+0xb4/0xcc (target:
+  ashmem_miscs+0x10/0x140; expected type: 0xe61887de)` → `Oops - CFI`
+  fatal, KTIME 10762.32, CPU 0, task `cve43499-run:16226`. `Modules
+  linked in:` carries NO `kernelsu` LKM (the sole `kernelsu` string in
+  the dump is an unrelated userspace `weishu.kernelsu` task line) →
+  **pre-load, pre-root panic**. Device rebooted on its own to
+  `c40722eb` (`ro.boot.bootreason=reboot`); this worker ran NOTHING
+  (boot-storm protocol: pull only, zero executions).
+- Verification items (a)–(e) unrunnable (no root session); Manager
+  skipped per protocol.
+
+Boot对照 (this round):
+
+| Field | Before (exploit boot) | After |
+| --- | --- | --- |
+| boot_id | `55936f1a` | `c40722eb` |
+| kernelsu module | absent (never loaded this boot) | absent (volatile) |
+| SELinux | Enforcing (never left Enforcing — no root) | Enforcing |
+| `/data/local/tmp` round files | pushed pre-fire, hash-verified | all present, hashes intact |
+
+llseek-slot note (source-verified, cf. §9.10): spray plants
+`FOPS_LLSEEK_OFF` as `fake_w0 + FAKE_WAITER_PI_TREE_ENTRY_OFF`
+(`= fake_w0+0x18`; `put_fake_fops_table`, `src/util.c:930-931`), and
+`repair_fake_fops_llseek` (`src/fops.c:269`, called at `src/fops.c:453`
+inside `try_cfi_stage`) rewrites that slot to `NOOP_LLSEEK` post-flip.
+The gate (§9.10–§9.12) deliberately never gates this slot — only the
+ioctl slot (`text_addr(ASHMEM_IOCTL)`) is stable across re-prepares.
+#134 is the consequence: an `lseek` issued through the overwritten
+`misc_fops` hit the llseek slot while it still held the non-llseek-typed
+planted value (repair runs only post-flip inside `try_cfi_stage`), so CFI
+killed it (`expected type 0xe61887de` vs planted gadget). The llseek slot
+is flip-racy by construction — planted gadget first, repaired later —
+and any trigger path that issues `lseek` between flip and repair dies
+exactly this way. Parent-session decision how to close it; no source
+changed here, nothing committed.
+
+Scoreboard (all EZIF hardware rounds to date): **1/6** — one full-chain
+root + KSU v3.3.1 live (boot `8ae3860a` run 1, §9.6); five panics: run-2
+`misc_open`/`try_module_get` (post-load, same-boot re-invoke, §9.6),
+#131 + #132 PI `refcount_warn_saturate ← rt_mutex_adjust_prio_chain`
+(pre-root, §9.7/§9.8), #133 CFI `__arm64_sys_ioctl` (post-PI, pre-root,
+§9.9), #134 CFI `__arm64_sys_lseek` (pre-root, this section).
+
+#### 9.14-supplement: run record (concise) — same round as above, PANIC pre-root, NEW CFI/lseek signature
+
+Single boot, single round, no second exploit. HEAD `19418fc` build as given
+(`efc8b49c…`, 104128 B, gate strings ×0) + `c49a6557…` root helper + v3.3.1
+ksud `fde99b5a…`, pushed as `lotto2_*` (sizes/ELF/md5 verified pre-fire),
+`.ksud-stage` + `ksud-s25u-kdp` preset. Idle gate: boot `55936f1a`, up
+~3 h, load ~1.6–2.0, `boot_completed=1`, no `kernelsu`, `Enforcing`.
+Full record: `/mnt/240G_SSD/opencode_tmp/s3_lottery2/verdict.md` + durable
+`lotto2_boot55936f1a.log` (4760 B, SHA-256 `63cd2904…`).
+
+- Run (ONE invocation, `ATTEMPTS=24`, TIMEOUT 300/180,
+  `STACK_WRITER_DELAY_USEC=125000`): attempt **1/24**, slide `0x170000`
+  (quorum `best=00170000 hits=17`, unanimous; same per-boot value as the
+  §9.11/§9.12 gate runs — 5th distinct per-boot slide, stable within boot),
+  `fops-page-held` → pi stages → `writer-enter` → transport died
+  (RUNNER_EXIT=255). No root, no late-load.
+- Panic `#134` (`dumpstate_lastkmsg_134_20261103_030839_KP.log.gz`, 642053 B,
+  + same-bytes latest, SHA-256 `109b485d…`): `Oops - CFI` at
+  `__arm64_sys_lseek+0xb4/0xcc`, task `cve43499-run:16226`, KTIME 10762.32,
+  no `kernelsu` (pre-load). `x8 = ffffffc00a54c200` = the planted fake_fops
+  address — the flip LANDED (ungated blind flip) and the first fops dispatch
+  died at `llseek` CFI. Same CFI family as #133 (ioctl), one stage later,
+  different syscall slot; PI-race window was passed.
+- Device self-rebooted to `c40722eb` (`bootreason=reboot`, `Enforcing`,
+  driver absent). Pushed files survived with hashes intact this time.
+- Verification (a)–(e) unrunnable without a root session; no second round.
+  Shell-side only: `Enforcing` throughout, driver absent. Manager skipped
+  per protocol (only v3.3.0 apk on hand, version-mismatch + UI needed).
+
+Status: chain root still ONLY from boot `8ae3860a` run 1 — now **1 root vs
+5 fops-stage panics** (run-2 post-load misc, #131/#132 PI, #133 ioctl-CFI,
+#134 lseek-CFI). Control-channel/`su`/Manager/resetprop/repeatability
+still TODO. Nothing committed.
