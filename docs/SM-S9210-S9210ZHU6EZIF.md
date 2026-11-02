@@ -595,3 +595,151 @@ compile-time interlocks exist precisely so that no `.so` can be built
 with a guessed SHIFT/DELTA (a wrong value mis-slides or panics the
 target). Status = **BLOCKING on EZIF hardware**. S4/S5/S6 remain gated
 until §8.4 is measured on device.
+
+## 9. S5 static dual-build record (2026-11-02, no device; KSU-only)
+
+Scope: build + statically audit the KernelSU LKM + ksud pair for EZIF
+TWICE — v3.3.1 (主力) and v3.3.0 (保底) — with everything else held
+constant (same DDK, same Kconfig, same target vermagic; only the KSU
+base differs). No feed touched, no repo binaries added, nothing
+published. Workdir (all artifacts, never committed):
+`/mnt/240G_SSD/opencode_tmp/EZIF_ksu/`.
+
+### 9.1 Build matrix
+
+| Axis | v3.3.1 (主力) | v3.3.0 (保底) |
+| --- | --- | --- |
+| Upstream commit | `0c0fdb960178fa12d80d6cbcfdcb6ad8be6a865d` (tag `v3.3.1`, 2026-10-12) | `932014ab5b2c9b74a3d11e2ec4d17dd10fc944e2e` (tag `v3.3.0`, 2026-08-28) |
+| `rev-list --count` / KSU version | 2680 / **32680** | 2601 / **32601** |
+| Samsung patch | `KernelSU-v3.3.1-samsung-kdp-rkp-defex.patch` (rebased, §9.2; 1260 lines) | `kernelsu/patches/KernelSU-v3.3.0-samsung-kdp-rkp-defex.patch` (in-repo, applied strictly clean) |
+| DDK | `ghcr.io/ylarod/ddk-min:android14-6.1-20260313` (`sha256:1dd6ac…3d5d3`) | identical |
+| Release override (`utsrelease.h` + `kernel.release`) | `6.1.162-android14-11-34343818-abS9210ZHU6EZIF` | identical |
+| Kconfig | `CONFIG_KSU=m` + `KDP=y` + `RKP=y` + `DEFEX=y` + `NO_PATCH_TEXT=y`, `CC=clang` | identical |
+| `modinfo` vermagic | `6.1.162-android14-11-34343818-abS9210ZHU6EZIF SMP preempt mod_unload modversions aarch64` — exact target match | identical string |
+| Baked `KSU_VERSION` (disasm immediate) | `mov w11, #0x7fa8 // =32680` (supercall dispatch) | `mov x9, #0x7f59 // =32601` (supercall dispatch) |
+
+In-container `git` is unavailable, so both builds took the patch's
+`KSU_VERSION ?=` fallback (observed in build logs: `fallback version:
+32680` / `32601`) — consistent with the `rev-list` counts above.
+`compat/samsung_kdp.o` + `compat/samsung_defex.o` compiled in both
+logs; each build's own `check_symbol` vs the DDK vmlinux ran (exit 0
+via `set -e`). `make clean` needed `touch check_symbol` first (the
+`clean` target's bare `rm check_symbol` fails on a fresh tree) —
+logged in `build-330.log` / `build-331.log`.
+
+### 9.2 Samsung patch rebase v3.3.0 → v3.3.1 (no silent skips)
+
+`git apply --check` of the v3.3.0 patch on pristine v3.3.1 failed on 4
+files (`Kbuild`, `core/init.c`, `syscall_hook_manager.c`,
+`late_load.rs`); the rest applied. A fuzz pass (`patch --fuzz=3`)
+landed 2 hunks in SEMANTICALLY WRONG positions — both caught on
+review and repaired by hand (no KDP/RKP/DEFEX/NO_PATCH_TEXT semantic
+dropped):
+
+- `core/init.c`: fuzz put the patch's `int ret;` (meant for
+  `kernelsu_init()`) at file scope inside `#ifdef MODULE`. Moved to
+  the function body; KDP/DEFEX init + exit order kept identical to
+  v3.3.0 relative to shared anchors (`prepare_creds`,
+  `ksu_syscall_hook_init`, `put_cred` → `ksu_put_cred` + exits).
+- `syscall_hook_manager.c`: fuzz placed the `#include
+  "policy/allowlist.h"` + `syscall_hook_manager_initialized` + the
+  whole RKP/kretprobe/sucompat-kprobe block INSIDE the pre-existing
+  `#if defined(__riscv)` guard (would compile out on arm64 — a
+  silent RKP skip). Moved to after the riscv `#endif`; the
+  dispatcher-unavailable → Samsung-kprobe-fallback + early-return
+  logic is preserved against v3.3.1's restructured init/exit
+  (v3.3.1 removed the old `ksu_dispatcher_nr < 0` early return; the
+  samsung hunk re-adds it with the RKP fallback inside).
+- `Kbuild`: fallback `KSU_VERSION ?= 32601` → `32680`; samsung obj
+  lines re-anchored after `core/init.o`; ccflags inside the
+  `KBUILD_EXTMOD` guard (external-module build sets it, so flags are
+  active — same as v3.3.0).
+- `userspace/ksud/src/late_load.rs`: all 4 hunks rejected (file
+  restructured upstream: `ScriptWait`, `BOOT_STAGE_TIMEOUT`,
+  `init_forced_features`). Reconciled by hand, all 5 semantics kept:
+  drop `process::Command` import, `_package_name`, REMOVE the
+  `utils::daemonize(false)?;` first line (as the v3.3.0 patch does —
+  the staged binary runs in the right context already),
+  `stage_daemon_from("/data/local/tmp/.ksud-stage")` after the start
+  dump, `finish_install` instead of `install`, delete the `am
+  force-stop/start` Manager-restart tail.
+- New files (`compat/samsung_kdp.c`, `compat/samsung_defex.c/.h`,
+  `include/ksu_samsung_kdp.h`) carried over byte-identical;
+  `void→int ksu_syscall_table_hook` + call-site `-1` handling,
+  `NO_PATCH_TEXT` stub (`-EOPNOTSUPP`, zero `stop_machine` imports),
+  `put_cred` → `ksu_put_cred`, `commit_creds` → KDP commit +
+  `defex_sync`, sucompat `__exit` drop all applied to v3.3.1 cleanly.
+
+Verification: the generated v3.3.1 patch passes strict `git apply
+--check` (no fuzz) on a pristine v3.3.1 worktree.
+
+### 9.3 Static audit (both versions; unstripped AND post-strip)
+
+Target ELF: `/mnt/240G_SSD/opencode_tmp/EZIF_work/vmlinux.elf`;
+symvers `Module.symvers.ezif` (8346 entries, regenerated from the
+EZIF ELF). `check_symbol` built from each own tree (host `gcc -O2`).
+
+| Check | v3.3.1 | v3.3.0 |
+| --- | --- | --- |
+| `check_symbol <ko> vmlinux.elf` | exit 0 (pre- and post-strip) | exit 0 (pre- and post-strip) |
+| `audit_module_against_target.py --manual-relocation` | 221 undefined / 0 version entries / **0 missing / 81 kallsyms / 0 CRC mismatches** | 202 undefined / 0 version entries / **0 missing / 70 kallsyms / 0 CRC mismatches** (identical fingerprint to the DZG1 v3.2.5/v3.3.0 reference 202/0/70) |
+| `UND stop_machine` imports | 0 | 0 |
+| `__versions` section size | 0 | 0 |
+| `.symtab`/`.strtab` retained post-strip | yes (`llvm-strip -d`, NDK r29) | yes |
+
+Audit-shape delta (221/81 vs 202/70) is expected: v3.3.1 adds
+`module_blacklist`, `shell_su_adb_only`, riscv paths etc. The
+gates — 0 missing, 0 CRC — hold on both. No Kconfig downgrade was
+used to force a pass.
+
+### 9.4 Artifacts (sizes + SHA-256; workdir only, NOT in git)
+
+Stripped with NDK r29 `llvm-strip -d`; ksud via
+`cargo build --locked --release --target aarch64-linux-android -p
+ksud` (NDK r29, `aarch64-linux-android35-clang`,
+`CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER` + `LIBCLANG_PATH=…/lib`;
+a bare host-`cc` link fails on `-llog/-lunwind`, so the linker env
+is load-bearing). Both ksuds: aarch64 PIE, `linker64`, `for Android
+35, built by NDK r29`.
+
+| File | Bytes | SHA-256 |
+| --- | --- | --- |
+| `android14-6.1_kernelsu-e1q-S9210ZHU6EZIF-kdp-v3.3.1.ko` (stripped) | 432656 | `af640cdae6a9414dfe7b2eebe60e0d3e428b8f26862c14c7348f88e7a3863e4a` |
+| `android14-6.1_kernelsu-e1q-S9210ZHU6EZIF-kdp-v3.3.0.ko` (stripped) | 406160 | `3f3e558ba808eb67566fd97fa5a70aaed50f4739fc5c75d124d5447b011872bc` |
+| `e1q-v3.3.1-unstripped.ko` (BTF/debug retained) | 6210312 | `9fe7a72faf06e33d288259898f8f6d23d7a2d5c93a049f03def201e785f7d551` |
+| `e1q-v3.3.0-unstripped.ko` (BTF/debug retained) | 5851848 | `829ee8bef7ed39e3af0ad54f8e3dc59433c4a7743f6dc2fdfad9713f5c823110` |
+| `ksud-e1q-S9210ZHU6EZIF-kdp-v3.3.1` | 5065680 | `fde99b5a129e5714fe6f598cf8276c76d2cbaf1a7f4e6ce9ae69d5ebca0abe61` |
+| `ksud-e1q-S9210ZHU6EZIF-kdp-v3.3.0` | 4993656 | `bc7399a38f4e78471f32f7bded3c9788f26132b22768051c5a783ef7501903e8` |
+
+(Full hashes: `SHA256SUMS.txt` in the workdir.)
+
+Asset-pipeline proof (v3.3.0 tree): swapping the embedded
+`android14-6.1_kernelsu.ko` asset to the v3.3.1 module and
+rebuilding changes ksud 4993656 → 5003896 B; restoring the asset and
+rebuilding returns to 4993656 B with only 2 bytes differing inside
+the compressed-asset region (multithreaded-compression
+nondeterminism, same input). rust-embed uses compression, so module
+bytes are not greppable — the size response is the proof, same
+method as the DZG1 record. Ground truth remains hardware late-load.
+
+### 9.5 Pending on-device validation (all BLOCKING for any S6/publish)
+
+- Manager pairing: v3.3.1 ksud ↔ Manager reporting **32680**, v3.3.0
+  ksud ↔ **32601**; capture `Working <LKM>` UI state with NO
+  version-mismatch banner for the chosen pair.
+- Full hardware chain on SM-S9210 EZIF (tracefs slide → fops → cfi →
+  phys → root umh → pipe → KernelSU late-load → granted `su`) for
+  the chosen pair; the other pair stays a cold spare.
+- resetprop regression (`set/get/delete/wait`, `ro.*` ≥93B long
+  values, `-f load_props`, `-c/--force rebuild`, magica adb_root
+  toggle, `sys.boot_completed` wait, `su`), repeatability +
+  reboot-persistence matrix (same gates as DZG1 §PhaseD).
+- S3 interlocks (§8.4) still block the `.so` release path — the KSU
+  pair above is validated statically only and MUST NOT be published
+  to `kernelsu/` or the feed until hardware proof exists.
+- Reproducibility gap (inherited from DZG1): `ksu_props` is pinned
+  (`KernelSU2/ksu_props@ddb6ee7` for v3.3.0; v3.3.1's lockfile
+  already points at KernelSU2 sources) and this machine's
+  `~/.cargo/git` cache covered the remaining git crates — a clean
+  machine still needs the same treatment. DDK-side (`make clean`
+  quirk, fallback-version path) is fully logged and replayable.
