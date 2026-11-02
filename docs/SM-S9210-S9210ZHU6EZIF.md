@@ -876,3 +876,73 @@ trigger per boot once KSU is late-loaded — same-boot re-invoke
 panics**; post-late-load verification needs a root channel that
 survives the Enforcing restore (temp-root socket currently does
 not), otherwise verify via reboot + fresh run ordering.
+
+### 9.7 Single-round re-run on boot `92b4814c` (2026-11-02) — PANIC pre-root, NO ROOT
+
+Single boot, single round, no second exploit (per protocol). Previous
+boot `92b4814c` (post-run2 clean reboot) was settled first, then one
+full chain was fired once. It panicked during fops — no root, no
+late-load, so verification items (a)–(d) could not run.
+
+- Idle gate (same boot, before push): `boot_id 92b4814c-…`,
+  `uptime 882s` (>600 ✓), `load 2.12` (<3 ✓), `boot_completed=1`,
+  `getenforce Enforcing`, no `kernelsu` in `/proc/modules`.
+- Push + preset (SHA-256 re-verified on device): `ezif_app.release.so`
+  `9c6cf160b7b24eaa…` (104128 B), `ezif_root` `c49a655708be…`
+  (27264 B), `ezif_ksud-331` + `ksud-s25u-kdp` both
+  `fde99b5a129e5714…` (5065680 B); `.ksud-stage` preset via `cp`
+  (5065680 B, same hash). Stale `temp_su.sock` from the prior boot
+  could not be removed as shell (`Permission denied`, MAC —
+  consistent with the §9.6 blocker); the fresh daemon was left to
+  `unlink` it as root.
+- Run (ONE invocation, `ATTEMPTS=24`, `EXPLOIT_ATTEMPT_TIMEOUT_SEC=300`,
+  `P0_ATTEMPT_TIMEOUT_SEC=180` via `--run-payload` →
+  `/data/local/tmp/ezif_s3verify.log`): attempt **1/24**,
+  `slide-kaslr-ok source=tracefs base=ffffffc008140000
+  slide=0x140000` (quorum `best=00140000 hits=14 second=0`, unanimous;
+  per-boot slide differs from run 1's `0x90000` as expected),
+  `fops-page-held` checkpoint, then the device rebooted mid-fops
+  (live transport reached `writer-enter`; the file ends at
+  `fops-page-held` — post-checkpoint lines were lost with the crash).
+  No `exploit completed`, no pipe physrw, no root umh, no late-load.
+- Result: **NO ROOT**. Items (a) `su -c id`, (b) Manager
+  `Working<LKM>/32680`, (c) post-root SELinux, (d) live-driver
+  version could NOT run — there was no root session. Shell-side facts
+  only: pre-run `Enforcing`, post-reboot `Enforcing`, no `kernelsu`
+  module; `ezif_ksud-331 --version` as shell = `ksud 3.3.1 (uapi: 5)`,
+  `debug info` as shell = `version: 0` (driver not live, as expected
+  with no load). Manager: only `manager-base.apk` v3.3.0 (32601) is
+  on hand (`/mnt/240G_SSD/opencode_tmp/s24-logs/`); it version-mismatches
+  the v3.3.1 ksud and needs UI grant steps, so install/UI was skipped
+  per protocol (v3.3.1 apk not fetched — no second round to use it).
+- Panic handling (per protocol: stop, pull, no re-fire): device left
+  `adb` briefly, then returned on new boot `294e33d3`
+  (`ro.boot.bootreason=reboot`, `boot_completed=1`, no `kernelsu`,
+  `Enforcing`). Pulled `/data/local/tmp/ezif_s3verify.log` (4251 B)
+  + on-device `dumpstate_lastkmsg_131_20261102_231004_KP.log.gz`
+  (#131, 625428 B). Signature differs from run 2: `CPU: 1 PID: 26141
+  Comm: cve43499-run`, `refcount_warn_saturate` ←
+  `rt_mutex_adjust_prio_chain` ← `rt_mutex_adjust_pi` ←
+  `__sched_setscheduler` ← `__arm64_sys_sched_setattr`, then `Oops:
+  96000005` NULL deref at `0x18` (KTIME 818.59, `Modules linked in:`
+  with NO `kernelsu` — panic pre-load, unlike run 2's
+  `try_module_get/misc_open` post-load panic). Retained under
+  `/mnt/240G_SSD/opencode_tmp/EZIF_panic/` (`ezif_s3verify_boot92b4814c.log`
+  + `#131` zip + `dumpstate_latest_after_s3verify.log.gz`).
+
+Boot对照 (this round):
+
+| Field | Before (exploit boot) | After |
+| --- | --- | --- |
+| boot_id | `92b4814c` | `294e33d3` |
+| uptime/load at session | 882 s, load 2.12, `boot_completed=1` | ~212–324 s, load 4–13 (settling), `boot_completed=1` |
+| kernelsu module | absent (never loaded this boot) | absent (volatile) |
+| SELinux | Enforcing (never left Enforcing — no root) | Enforcing |
+| `.ksud-stage` | preset, unconsumed (no late-load) | still present (no load consumed it) |
+
+Status vs §9.5/§9.6: chain root NOT reproduced this boot; v3.3.1
+module-live stays proven ONLY from boot `8ae3860a` run 1;
+control-channel/`su`/Manager/resetprop/repeatability still TODO.
+New observation: fops-stage panic can strike a fresh boot pre-root
+(this boot, slide `0x140000`), not only same-boot re-invoke post-load
+(run 2, slide `0x90000`) — volatility note for the repeatability matrix.
