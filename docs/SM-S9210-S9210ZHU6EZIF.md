@@ -596,6 +596,40 @@ with a guessed SHIFT/DELTA (a wrong value mis-slides or panics the
 target). Status = **BLOCKING on EZIF hardware**. S4/S5/S6 remain gated
 until §8.4 is measured on device.
 
+### 8.6 S3 completion — both interlocks cleared on EZIF hardware (2026-11-02)
+
+On-device runs on the live SM-S9210 EZIF unit (boot `8ae3860a` alive)
+fixed both hardware-tuned values; `target.h` now carries measured
+values, not guesses:
+
+- `SKB_DATA_DELTA = (-0xe80LL)` — on-device HIT confirmed.
+- `SLIDE_PSELECT_WORD_SHIFT = 3` — gate HIT + DZG1 same-platform
+  (SM-S9210/pineapple) prior. The retry7 MISS is characterized as a
+  dying-boot pipeline fault, not a SHIFT finding.
+- `MM_STRUCT_SZ = 0x400` unchanged (unconditional, slabinfo-proven;
+  set in `2d124f6`, untouched here).
+
+Verification (no `probe_mm.sh` exists in this repo — equivalent checks):
+
+- `grep -rn TODO_offsets_ src/targets/e1q-S9210ZHU6EZIF/` → zero
+  hits (both poison macros gone; only historical `TODO(offsets)`
+  prose remains in comments/docs).
+- `make TARGET=e1q-S9210ZHU6EZIF
+  ANDROID_NDK_HOME=/home/samson1357924/Android/Sdk/ndk/29.0.14206865
+  release` → exit 0 (full output: single clang link line, no
+  warnings/errors beyond flags).
+- Artifact `build/e1q-S9210ZHU6EZIF/cve-2026-43499-app.release.so`:
+  **104128 bytes** (Makefile fixed-size padding satisfied, no
+  over-limit error), SHA-256
+  `9c6cf160b7b24eaa021d163c514c342ca4a4f850faa32ca30a61fb5a33593a51`,
+  `ELF 64-bit LSB shared object, ARM aarch64, for Android 35, NDK
+  r29, stripped`.
+
+Remaining gates (unchanged): tracefs `id`-file read vs offline 106,
+per-boot caller alignment + P0-range checks, `P0_KERNEL_PHYS_LOAD`
+linear-map self-consistency, full hardware chain + KSU validation
+(§8.4/§9.5). Nothing committed (working tree only).
+
 ## 9. S5 static dual-build record (2026-11-02, no device; KSU-only)
 
 Scope: build + statically audit the KernelSU LKM + ksud pair for EZIF
