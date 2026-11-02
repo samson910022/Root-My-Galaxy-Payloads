@@ -946,3 +946,64 @@ control-channel/`su`/Manager/resetprop/repeatability still TODO.
 New observation: fops-stage panic can strike a fresh boot pre-root
 (this boot, slide `0x140000`), not only same-boot re-invoke post-load
 (run 2, slide `0x90000`) — volatility note for the repeatability matrix.
+
+### 9.8 Single-round retry on boot `294e33d3` (2026-11-02) — PANIC pre-root, NO ROOT
+
+Single boot, single round, no second exploit (per protocol). Previous boot
+(`294e33d3`, post-#131 clean reboot) was settled first (uptime 852→879→1192 s,
+load1 2.34→2.27→1.55, `boot_completed=1`, no `kernelsu`, `Enforcing`), then one
+full chain was fired once. It panicked in the fops/PI stage — no root, no
+late-load, so verification items (a)–(e) could not run. Full record:
+`/mnt/240G_SSD/opencode_tmp/s3_retry_verify2/verdict.md`.
+
+- Push + preset (SHA-256 re-verified on device pre-fire): `ezif_retry2_app.release.so`
+  `9c6cf160b7b24eaa…` (104128 B, `7f 45 4c 46`), `ezif_retry2_root`
+  `c49a655708bed646…` (27264 B), `ezif_retry2_ksud-331` `fde99b5a129e5714…`
+  (5065680 B); `.ksud-stage` + `ksud-s25u-kdp` preset, same hash. Local `build/`
+  re-hashed identical — no rebuild, `target.h`/offsets untouched.
+- Run (ONE invocation, `ATTEMPTS=24`, `EXPLOIT_ATTEMPT_TIMEOUT_SEC=300`,
+  `P0_ATTEMPT_TIMEOUT_SEC=180` via `--run-payload` → `ezif_retry2.log`, 4626 B):
+  attempt **1/24**, `slide-kaslr-ok source=tracefs base=ffffffc008050000
+  slide=0x50000` (quorum `best=00050000 hits=16 second=0`, unanimous; third
+  distinct per-boot slide after `0x90000`/`0x140000`), `fops-page-held` →
+  pi stages → live transport reached `writer-enter`, then transport died
+  (durable log ends at `fops-page-held` — post-checkpoint lines lost, same as §9.7).
+  No `exploit completed`, no root umh, no late-load.
+- Panic handling (per protocol: stop, pull, no re-fire): device left `adb`
+  immediately, back after ~9 min on new boot `0aec734f`
+  (`ro.boot.bootreason=reboot`, `boot_completed=1`, no `kernelsu`, `Enforcing`).
+  Pulled `ezif_retry2.log` + on-device
+  `dumpstate_lastkmsg_132_20261102_233032_KP.log.gz` (#132, 608160 B).
+  Signature = same family as #131: `refcount_warn_saturate` ←
+  `rt_mutex_adjust_prio_chain+0x5a0` ← `rt_mutex_adjust_pi` ←
+  `__sched_setscheduler`, then `Oops: 96000005` NULL deref at `0x18`
+  (KTIME 1206.23, ~14 s into run, task `cve43499-run:28487`, CPU 1,
+  `Modules linked in:` with NO `kernelsu` → pre-load fops/PI panic).
+- Verification: (a) `su -c id`, (b) post-root SELinux, (c) driver-live `debug`,
+  (d) late-load — all unrunnable without a root session (re-running exploit for
+  a shell forbidden this round). Shell-side only: `Enforcing` throughout,
+  `ezif_ksud-331 --version` = `ksud 3.3.1 (uapi: 5)`, driver absent.
+  (e) Manager skipped per protocol (only v3.3.0 `manager-base.apk` on hand,
+  version-mismatch + UI steps; v3.3.1 apk not fetched).
+- Storage finding (new rule): the three files pushed this round (~1–2 min before
+  the panic) now read back **fully zero-filled** on storage (sizes intact, new
+  hashes `.so`→`e577d377…` etc.); previous-round files still hash correctly.
+  Pre-fire sha256 + correct in-memory execution (slide quorum, fops route)
+  prove the run used good bytes from page cache — the panic hit before f2fs
+  writeback. Rule: **after ANY panic-reboot, re-push + re-verify before the next
+  round**; retry2 on-device copies are garbage and must not be reused unpushed.
+
+Boot对照 (this round):
+
+| Field | Before (exploit boot) | After |
+| --- | --- | --- |
+| boot_id | `294e33d3` | `0aec734f` |
+| uptime/load at session | 852–1192 s, load 2.34→1.55, `boot_completed=1` | 538–581 s, load 28.96→19.24 settling, `boot_completed=1` |
+| kernelsu module | absent (never loaded this boot) | absent (volatile) |
+| SELinux | Enforcing (never left Enforcing — no root) | Enforcing |
+| `.ksud-stage` | preset, unconsumed, hash-ok (old file survived) | still present, hash-ok |
+
+Status vs §9.5/§9.6: chain root still proven ONLY from boot `8ae3860a` run 1;
+now THREE fops-stage panics vs one root (run 2 post-load re-invoke, s3verify +
+retry2 fresh-boot pre-root) — fops/PI window is the hot spot, probabilistic
+exploit confirmed. Control-channel/`su`/Manager/resetprop/repeatability still TODO.
