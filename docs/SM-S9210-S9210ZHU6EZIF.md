@@ -1105,3 +1105,36 @@ Isolation proof (other 29 targets byte-identical behavior):
   zero `gate_attempt` references. `-Wall -Wextra` clean on both.
 - No exploit run, no feed/KSU touched, nothing committed (working tree
   only).
+
+### 9.11 Pre-flip gate build — first hardware run on boot `55936f1a` (2026-11-03): 0 HIT, 24/24 clean exit, NO panic
+
+Single boot, single full-chain invocation, no second exploit. Gate build
+(`071425fa…`, 104128 B) fired once (`ATTEMPTS=24`, TIMEOUT 300/180,
+`STACK_WRITER_DELAY_USEC=125000`). Full record:
+`/mnt/240G_SSD/opencode_tmp/s3_gatebuild/verdict.md` + durable
+`ezif_gate_boot55936f1a.log` (181103 B, SHA-256 `e2fd3c61…`).
+
+- Push + preset verified pre-fire (size/ELF/md5 all match local):
+  `/data/local/tmp/ezif_gate.so` `c12acc3d…`, `ezif_gate_root`
+  `bed76c86…`, `ezif_gate_ksud-331` `5a01d50e…` (5065680 B, v3.3.1
+  `fde99b5a…`); `.ksud-stage` + `ksud-s25u-kdp` preset, same hash.
+- Idle gate: boot `55936f1a`, up ~97 min, load ~2.2, `boot_completed=1`,
+  no `kernelsu`, `Enforcing`.
+- Run: all 24 attempts `slide-kaslr-ok` unanimous `slide=0x170000`
+  (5th distinct per-boot slide, stable within boot) → `fops-page-held` →
+  gate 5/5 MISS every attempt (120 misses, read always `0x0` vs want
+  `ffffffc008eb4e8c`) → `production skipped, no flip performed` →
+  `failed status=1`; final `exploit failed after 24 independent attempts`.
+  **0 HIT, 0 `writer-enter`, 0 flips.**
+- Post-run: SAME boot `55936f1a` (no reboot, no panic), load ~1.9,
+  `Enforcing`, driver absent, all pushed hashes identical,
+  `.ksud-stage` unconsumed. Leftover nanosleep orphans killed (0 remain).
+- Verification (a)–(e) unrunnable (never entered writer); Manager skipped
+  per protocol (UI needed).
+
+Status vs §9.5/§9.6: fail-closed leg hardware-proven (24/24 no-flip
+survival vs four blind-flip panics on the ungated build); fail-open leg
+(HIT → writer) still unobserved. Chain root still ONLY from boot
+`8ae3860a` run 1. Read side deterministically zero (120/120) — gate
+withheld the flip correctly, but why-zero (wrong source page vs wrong
+read offset/len) is a parent-session decision.
