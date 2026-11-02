@@ -1359,3 +1359,65 @@ Status: chain root still ONLY from boot `8ae3860a` run 1 — now **1 root vs
 5 fops-stage panics** (run-2 post-load misc, #131/#132 PI, #133 ioctl-CFI,
 #134 lseek-CFI). Control-channel/`su`/Manager/resetprop/repeatability
 still TODO. Nothing committed.
+
+### 9.15 Single-shot-path retry lottery (static only, no device run)
+
+Gate reverted (`19418fc`: pre-trigger primitive confirmed dead, §9.12), so
+production is a pure lottery again — and the lottery was single-ticket:
+`APP_FOPS_FRESH_PAGE_ATTEMPTS=5` is dead code on this target because EZIF
+does not define `APP_REQUIRE_FRESH_P0_SESSION`, so the fresh retry loop
+(`src/main.c:594-683`) is compiled out and production walks the `#else`
+single-shot path (`attempt<=1`). NanoTurtle's same-core measurement says a
+real ×5 is worth 67%. This section puts the ×5 budget on the path EZIF
+actually walks. No exploit run, nothing committed.
+
+- Scope (hard constraint): `src/main.c` `#else` region only + one macro
+  `#define APP_FOPS_SINGLE_PATH_RETRY 1` in
+  `src/targets/e1q-S9210ZHU6EZIF/target.h`. No offsets/SHIFT/DELTA/MM/
+  PHYS_LOAD change; `src/fops.c`/`src/slide_app.c`/`src/pipe.c` untouched.
+  (`APP_FOPS_PREFLIP_GATE` stays defined but gates nothing — retired with
+  the reverted gate, kept for record.)
+- Design: the `#else` block is now `#if
+  defined(APP_FOPS_SINGLE_PATH_RETRY) && APP_FOPS_SINGLE_PATH_RETRY` /
+  retry loop / `#else` verbatim single shot / `#endif`. Loop bound reuses
+  `APP_FOPS_FRESH_PAGE_ATTEMPTS` (`#ifdef`, else 1 — other targets'
+  default behavior unchanged by construction). Retry body mirrors the
+  fresh-session loop: `attempt != 1` → `prepare_good_kernel_page
+  (PAGE_PAYLOAD_FOPS)` (unavailable → warning + `continue`) → trigger →
+  `verified = triggered && try_cfi_stage()` → `verified || cfi_dirty_seen`
+  breaks immediately (dirty state is never retried — same fail-closed
+  semantics as the fresh loop) → else clean-miss log. No
+  `reset_pipe_attempt` between attempts (that helper zeroes
+  `pipebuf_page_base` without rebuilding it, cf. §9.10).
+- Structural transplant check (why this was NOT BLOCKING): the EZIF
+  trigger (`src/slide_app.c:2442` leg) re-arms per call (cycling static
+  `delay_index`, fresh fork per call); `prepare_good_kernel_page` is the
+  designed fresh-page primitive (fresh loop + `src/fops.c:189` precedent);
+  `try_cfi_stage`'s clean-miss path only closes its fd (`dirty=0` → the
+  `fail:` restore is a no-op); `start_p0_ref_keeper` is idempotent.
+- Build proof (NDK r29
+  `/home/samson1357924/Android/Sdk/ndk/29.0.14206865`, `make release`
+  exit 0 both, `-Wall -Wextra` clean both):
+  e1q **104128 B**, SHA-256
+  `7b68f38d9c3836c83cfc5af3af454036fe6d3f5f455c504df5670c44c22e30cb`
+  (retires §9.12 gate-v2 `e25561fc…`); e3q-S9280ZCS6DZF2 control
+  **104128 B**, SHA-256
+  `955d79d75bd72816245595dcb14f7a829f6b5598f1fe5ef4b5b00e348ee8a3f2`
+  (**byte-identical to the §9.13 baseline — zero behavior change**).
+  `strings`: e1q `clean miss` ×1 / `fresh page unavailable` ×1 /
+  `attempt=%d/%d`; e3q `clean miss` ×0 / `attempt=%d/1`. Preprocessed
+  (`-DAPP_PAYLOAD=1 -E`): e1q expands to `const int
+  fops_single_attempts = 5; for (attempt <= fops_single_attempts)` with
+  fresh prepare + dirty-break; e3q still expands to verbatim
+  `for (int attempt = 1; attempt <= 1; …)`, zero retry references. Only
+  `src/main.c` + the EZIF `target.h` reference the new macro (29 targets
+  untouched).
+
+Dead-code lesson (extends §9.13 lesson 2): a retry budget is only real if
+it is live on the path the target walks — `#define` presence proves
+nothing. `APP_FOPS_FRESH_PAGE_ATTEMPTS=5` sat defined since the
+NanoTurtle tune while the only loop consuming it was compiled out for two
+whole rounds (§9.9/§9.14 burned single tickets without knowing it). Port
+checklist addition: after any macro/budget change, `-E`-expand the
+target's actual config and grep the production path for the bound before
+claiming the budget exists.
