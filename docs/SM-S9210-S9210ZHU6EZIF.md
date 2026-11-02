@@ -36,7 +36,7 @@ Feed rules: [`../README.md`](../README.md) + [`../support/README.md`](../support
 | vendor_boot.img size / SHA-256 | `100663296` bytes, SHA-256 `0397f376da4338c0f45bb9ca69b301c11af2a5d7b4f8b195ba2de760bc4ef613` (magic `VNDRBOOT`; retained at `/mnt/240G_SSD/opencode_tmp/EZIF_work/vendor_boot.img`) |
 | ARM64 Image text_offset / image_size / flags | `text_offset 0x0`, `image_size 0x2710000` (`40960000`), flags `0xa`, magic `ARMd` at `0x38` (Image header `@0x08/0x10/0x18` of the raw kernel slice) |
 | SELinux (device-measured) | `TODO(validation): record from device (\`getenforce\`, expected \`Enforcing\`)` |
-| tracefs event ID | `TODO(offsets): derive per PORTING.md §5 (DZG1 was 106; do NOT copy)` |
+| tracefs event ID | `106` offline-derived 2026-11-02 (S2): `(__event_sched_blocked_reason - __start_ftrace_events)/8 = 0x2B0/8 = 86`, `__TRACE_LAST_TYPE = 20` (BTF `trace_type`), `20 + 86 = 106`. Numeral matches DZG1 by coincidence — computed fresh from the EZIF ELF, not copied. Device `id`-file read still `TODO(validation)` |
 
 Provenance gate (S1, completed 2026-11-02): `samloader-rs` (`samloader 2.2.0`,
 topjohnwu/samloader-rs, `cargo install samloader --locked`; no IMEI/serial
@@ -96,10 +96,10 @@ DZG1 reference: [`SM-S9210-S9210ZHS6DZG1.md`](SM-S9210-S9210ZHS6DZG1.md)
 | Regions | BRI sales, OZS multi-CSC | TGY + BRI OZS in this branch; CHC separate branch | Scope narrower than "all OZS"; feed `models` must reflect this in S6 |
 | Kernel image / SHA | `38005248` bytes, SHA-256 `c34386a0…` recorded | `38140416` bytes (`0x245fa00`), SHA-256 `ce462331…` (S1 measured) | No reuse — values differ as expected |
 | Kernel release / vermagic | `6.1.145-android14-11-33419968-abS9210ZHS6DZG1` | `6.1.162-android14-11-34343818-abS9210ZHU6EZIF` / `TODO(KSU)` (S1 read banner; KSU rebuild pending) | No reuse; KSU `vermagic` must match exactly |
-| Audited offsets (`KMALLOC_CACHES`, `SLIDE_NFULNL_LOGGER_NAME`, `CALL_USERMODEHELPER_EXEC_WORK`, `SYSTEM_UNBOUND_WQ`, `INIT_TASK`, `ROOT_TASK_GROUP`, `SELINUX_ENFORCING`, `ASHMEM_*`, `ANON_PIPE_BUF_OPS`, logger objects, boot-id pointers, misc fops, tracefs caller) | All recorded in DZG1 doc + `src/targets/e1q-S9210ZHS6DZG1/target.h` | `TODO(offsets)` — every entry to be re-derived from EZIF `vmlinux.elf` + BTF per `PORTING.md` §3 | Copying `target.h` and renaming is FORBIDDEN (would boot-panic / mis-slide) |
-| BTF struct layouts (file_operations, page, task, rt_mutex_waiter, configfs, workqueue, selinux_state) | Match S9280 profile | `TODO(offsets)` — re-dump `bpftool btf dump ... format raw` + `format c` | No reuse without byte-level proof |
-| P0 table (`p0_fingerprint.h`, `P0_ORACLE_PROBE_OFFSET`, `P0_PHYS_OFFSET`, `P0_KERNEL_PHYS_LOAD`) | `0x1f0000` probe, `0x80000000` / `0x80080000`, 42 address words differ from S9280 | `TODO(offsets)` — regenerate all 32 slides × 8 qwords from EZIF raw kernel, 256-qword readback | Reuse across firmware is explicitly unsafe (cf. DZG1 §P0) |
-| Slide params (`SLIDE_TRACEFS_EVENT_ID`, `WORKER_CALLER_OFF`, `PSELECT_WORD_SHIFT`, bank geometry, `SKB_DATA_DELTA`, `TASK_STRIDE`, `LOCK_OFF`) | `106` / `0xdb1a0` / `3`, e1s-style geometry, `-0xe80`, `0x1c0`/`0x5200`, default 15 slabs | `TODO(offsets)` — recompute event ID, caller, fdset shift, geometry from EZIF ELF | DZG1 values are hints for bring-up order only, never defaults |
+| Audited offsets (`KMALLOC_CACHES`, `SLIDE_NFULNL_LOGGER_NAME`, `CALL_USERMODEHELPER_EXEC_WORK`, `SYSTEM_UNBOUND_WQ`, `INIT_TASK`, `ROOT_TASK_GROUP`, `SELINUX_ENFORCING`, `ASHMEM_*`, `ANON_PIPE_BUF_OPS`, logger objects, boot-id pointers, misc fops, tracefs caller) | All recorded in DZG1 doc + `src/targets/e1q-S9210ZHS6DZG1/target.h` | S2 measured 2026-11-02 from EZIF ELF/BTF only — full table + DZG1 deltas in §7; every entry differs from DZG1 (no reuse). Symbol on this kernel is the plural `ashmem_miscs`; macro keeps the shared name at `ashmem_miscs + 0x10` (BTF `miscdevice.fops` byte `0x10`) | Copying `target.h` and renaming is FORBIDDEN (would boot-panic / mis-slide) |
+| BTF struct layouts (file_operations, page, task, rt_mutex_waiter, configfs, workqueue, selinux_state) | Match S9280 profile | S2 re-dumped from EZIF BTF (`format raw` byte offsets) — all match the template structure, each re-verified, none copied (see §7). No reuse without byte-level proof — proof recorded | No reuse without byte-level proof |
+| P0 table (`p0_fingerprint.h`, `P0_ORACLE_PROBE_OFFSET`, `P0_PHYS_OFFSET`, `P0_KERNEL_PHYS_LOAD`) | `0x1f0000` probe, `0x80000000` / `0x80080000`, 42 address words differ from S9280 | S2 regenerated from EZIF raw kernel: all 32 slides × 8 qwords + 256-qword readback verified (`p0_fingerprint.h` committed). `P0_PHYS_OFFSET = 0x80000000` DTB-proven (EZIF vendor_boot DTB `gunyah_hyp_region@80000000`, reg base `0x80000000`); `P0_KERNEL_PHYS_LOAD = 0x80080000` = memstart + ARM64 TEXT_OFFSET with same-board (SM-S9210/pineapple) hardware precedent — `TODO(validation)` linear-map self-consistency on EZIF hardware | Reuse across firmware is explicitly unsafe (cf. DZG1 §P0) |
+| Slide params (`SLIDE_TRACEFS_EVENT_ID`, `WORKER_CALLER_OFF`, `PSELECT_WORD_SHIFT`, bank geometry, `SKB_DATA_DELTA`, `TASK_STRIDE`, `LOCK_OFF`) | `106` / `0xdb1a0` / `3`, e1s-style geometry, `-0xe80`, `0x1c0`/`0x5200`, default 15 slabs | Event ID `106` + caller `0x000db39c` derived from EZIF ELF (see §7; numeral 106 is recomputed, not copied). `SLIDE_PSELECT_WORD_SHIFT` + `SKB_DATA_DELTA` stay `TODO(offsets)` — hardware-tuned per firmware (see §7); bank/slab geometry keeps the invariant cross-target structure, re-validation on hardware still `TODO(validation)` | DZG1 values are hints for bring-up order only, never defaults |
 | KernelSU pair | v3.2.5 feed pair + v3.3.0 Phase-D candidate (one 2026-10-03 success) | `TODO(KSU)` — rebuild + `check_symbol` + `modinfo` + static audit + hardware runs | Do NOT copy DZG1 `.ko`/`ksud` |
 | Hardware validation | Device-tested 2026-09-11 (v3.2.5), candidate 2026-10-03 (v3.3.0) | `TODO(validation)` — no runs yet | S0 performs zero runs |
 
@@ -119,12 +119,29 @@ Numbering follows `PORTING.md` §1–§9. S0 is this file only.
   build ID `CP2A.260605.016`, changelist, SDK 37, page size 4096) recorded;
   AP tar + fota.zip deleted after use, raw `kernel` + ZIP + props retained in
   `/mnt/240G_SSD/opencode_tmp/` (never committed).
-- [ ] **S2 — symbols + BTF + offsets (PORTING.md §3). ACCEPT:** `vmlinux-to-elf`
-  + `llvm-nm` transcript; exactly-one raw BTF blob interval with header/section
-  validation; `format raw` + `format c` dumps kept during work; every macro-use
-  offset table filled from EZIF ELF (no DZG1 carry-over); `ashmem_misc+fops`
-  derivation shown; logger vs registry vs boot-id roles kept distinct;
-  `sizeof`/member offsets from raw BTF with byte-alignment checks.
+- [x] **S2 — symbols + BTF + offsets (PORTING.md §3). DONE 2026-11-02
+  (partial: all ELF/BTF/DTB-derivable values measured, see §7; two
+  hardware-tuned values stay `TODO(offsets)`):** `vmlinux-to-elf`
+  (`vmlinux.elf` 43222470 B, base `0xffffffc008000000` = `_text`, 107567
+  symbols) + NDK-r29 `llvm-nm` transcript; exactly-one raw BTF blob
+  `[0x1820e90, 0x1dd7cb8)` (5991976 B, header/section validated);
+  `format raw` (328805 lines) + `format c` dumps kept in
+  `/mnt/240G_SSD/opencode_tmp/EZIF_work/` during work (never committed);
+  every macro-use offset filled from the EZIF ELF (no DZG1 carry-over —
+  full diff table in §7); `ashmem_miscs + 0x10` derivation via BTF
+  `miscdevice.fops`; logger-name/object/registry/boot-id roles kept
+  distinct with pointer cross-checks; `sizeof`/member offsets from raw BTF
+  with byte-alignment checks (all match the template structure, each
+  re-verified, none copied). `SLIDE_PSELECT_WORD_SHIFT` and
+  `SKB_DATA_DELTA` remain `TODO(offsets)` (hardware-tuned per firmware —
+  in-repo pineapple 6.1 values diverge 0/3/4 and -0xe80/-0x1000; offline
+  guessing is forbidden, so both expand to undeclared identifiers and any
+  premature S4 use fails loudly instead of mis-sliding). New headers
+  `src/targets/e1q-S9210ZHU6EZIF/target.h` +
+  `src/targets/e1q-S9210ZHU6EZIF/p0_fingerprint.h` authored from EZIF data
+  only; `make TARGET=e1q-S9210ZHU6EZIF
+  ANDROID_NDK_HOME=/home/samson1357924/Android/Sdk/ndk/29.0.14206865 info`
+  passes (release NOT run).
 - [ ] **S3 — physical load + slide params (PORTING.md §4–§5). ACCEPT:** sboot
   `text_offset+0x80000000` derivation with file offset + disassembly (no S25U
   copy); `P0_PHYS_OFFSET` / `P0_KERNEL_PHYS_LOAD` proven; tracefs event ID from
@@ -236,21 +253,197 @@ re-verified against the EZIF target before S6 hardware runs.
 - [x] `TODO(kernel)` → DONE S1 (hashes/banner/header/fingerprint/display ID):
   boot/vendor_boot sizes + SHA-256, kernel slice size + SHA-256, Image header,
   kernel release string. Still open for S2: BTF interval, sboot phys-load proof.
-- `TODO(offsets)`: every `*_OFF` macro, BTF layouts, event ID, caller offset,
-  pselect shift, bank/slab geometry, full P0 table + readback.
+- `TODO(offsets)`: all ELF/BTF/DTB-derivable `*_OFF` macros, BTF layouts,
+  event ID, worker caller, full P0 table + readback DONE S2 (see §7).
+  Still open: `SLIDE_PSELECT_WORD_SHIFT` + `SKB_DATA_DELTA` (hardware-tuned
+  per firmware — S3/S6 must measure on EZIF hardware; both are loud
+  compile-time `TODO(offsets)` interlocks, never DZG1 copies), plus
+  `P0_KERNEL_PHYS_LOAD` linear-map self-consistency (offline derivation
+  recorded in §7, hardware confirmation pending).
 - `TODO(KSU)`: pinned KSU version, Samsung patch record, `check_symbol`,
   `modinfo` vermagic, KO + ksud sizes + SHA-256, static audit.
 - `TODO(validation)`: device-measured SELinux, full-chain hardware transcript,
   KernelSU control-channel + manager evidence, repeatability/reboot/resetprop
   matrix, thermal/peak notes.
 
-## 6. S0 non-goals (explicitly NOT done; S1 update: samloader + extract done)
+## 6. S0 non-goals (explicitly NOT done; S1 update: samloader + extract done;
+S2 update: ELF/BTF/P0 measured, headers authored — release NOT built)
 
 - S1 DONE: `samloader` query/download + `lz4`/`tar` extraction (cf. §1 record).
-  Still NOT done: `vmlinux-to-elf`/`llvm-nm`/`bpftool` runs (cf. `PORTING.md` §3).
-- No `src/targets/e1q-S9210ZHU6EZIF/` files (creating `target.h` by copying
-  DZG1 is forbidden — it would mis-slide and panic).
+- S2 DONE 2026-11-02: `vmlinux-to-elf`/`llvm-nm`/`bpftool` runs (cf. §7);
+  `src/targets/e1q-S9210ZHU6EZIF/target.h` + `p0_fingerprint.h` authored
+  from EZIF data only (copying DZG1 values remains forbidden — S2 verified
+  every entry differs). Two hardware-tuned values are loud `TODO(offsets)`
+  interlocks, not guesses; `release` NOT run (S4 scope).
 - No `support/targets-v*.json` edits (S6 only, after hardware proof).
 - No `.so` / `.ko` / `ksud` / `zip` / `img` artifacts committed.
 - No kernel SHA, offsets, `vermagic`, P0 rows, or KSU hashes invented to "fill
-  the table". This file intentionally leaves them as `TODO(...)`.
+  the table". Unmeasurable-offline items stay `TODO(...)`.
+
+## 7. S2 measurement record (2026-11-02, EZIF ELF/BTF/DTB only)
+
+Work intermediates (`vmlinux.elf`, `vmlinux.nm`, `vmlinux.btf`,
+`vmlinux-btf.raw`, `vmlinux-btf.h`, `worker_thread.asm`,
+`core_sys_select.asm`, `p0_fingerprint_gen.h`, `e1q.dtb`, `bl/abl.elf`)
+retained in `/mnt/240G_SSD/opencode_tmp/EZIF_work/`, never committed.
+Toolchain note: the task's `ANDROID_NDK_HOME=/home/samson910022/...` path
+does not exist on this machine; S2 used the installed
+`/home/samson1357924/Android/Sdk/ndk/29.0.14206865` (r29) for `llvm-nm` /
+`llvm-objdump` / `make info`.
+
+### 7.1 ELF recovery + BTF blob
+
+- `vmlinux-to-elf kernel vmlinux.elf` → 43222470 B, guessed base
+  `0xffffffc008000000` (matches `_text` from `llvm-nm`: `107567` symbols).
+- Raw BTF scan (PORTING.md §3 script): exactly one validated blob
+  `[0x1820e90, 0x1dd7cb8)` (5991976 B, `magic 0xeb9f ver 1 flags 0
+  hdr 24`, section bounds + NUL string-start checked).
+- `bpftool btf dump file vmlinux.btf format raw` (328805 lines, values used
+  for every layout below) + `format c` (150823 lines, declaration view only).
+
+### 7.2 Symbol offsets (each = `llvm-nm` addr − `0xffffffc008000000`)
+
+| Macro/use | Symbol | EZIF off | DZG1 off | Δ |
+| --- | --- | ---: | ---: | ---: |
+| `CALL_USERMODEHELPER_EXEC_WORK_OFF` | `call_usermodehelper_exec_work` | `0x000d3be0` | `0x000d39cc` | +0x214 |
+| `SLIDE_TRACEFS_WORKER_CALLER_OFF` | post-`bl schedule` ret in `worker_thread` (§7.4) | `0x000db39c` | `0x000db1a0` | +0x1fc |
+| `NOOP_LLSEEK_OFF` | `noop_llseek` | `0x003a235c` | `0x003a14e4` | +0xe78 |
+| `COPY_SPLICE_READ_OFF` | `generic_file_splice_read` | `0x003f07c4` | `0x003ef340` | +0x1484 |
+| `CONFIGFS_READ_ITER_OFF` | `configfs_read_iter` | `0x00472b84` | `0x004712a4` | +0x18e0 |
+| `CONFIGFS_BIN_WRITE_ITER_OFF` | `configfs_bin_write_iter` | `0x004730b4` | `0x004717d4` | +0x18e0 |
+| `ASHMEM_IOCTL_OFF` | `ashmem_ioctl` | `0x00d44e8c` | `0x00d3a314` | +0xab78 |
+| `ASHMEM_COMPAT_IOCTL_OFF` | `compat_ashmem_ioctl` | `0x00d457c4` | `0x00d3ac4c` | +0xab78 |
+| `ASHMEM_MMAP_OFF` | `ashmem_mmap` | `0x00d4581c` | `0x00d3aca4` | +0xab78 |
+| `ASHMEM_OPEN_OFF` | `ashmem_open` | `0x00d45a48` | `0x00d3aed0` | +0xab78 |
+| `ASHMEM_RELEASE_OFF` | `ashmem_release` | `0x00d45ad0` | `0x00d3af58` | +0xab78 |
+| `ASHMEM_SHOW_FDINFO_OFF` | `ashmem_show_fdinfo` | `0x00d45bf0` | `0x00d3b078` | +0xab78 |
+| `ANON_PIPE_BUF_OPS_OFF` | `anon_pipe_buf_ops` | `0x0122ad50` | `0x01219d90` | +0x10fc0 |
+| `ASHMEM_FOPS_OFF` | `ashmem_fops` | `0x013e2e30` | `0x013d1140` | +0x11cf0 |
+| `SLIDE_NFULNL_LOGGER_OFF` (`"nfnetlink_log"` string, §7.3) | string ref'd by `nfulnl_logger.name` | `0x016ba44f` | `0x016a61e6` | +0x14269 |
+| `KMALLOC_CACHES_OFF` | `kmalloc_caches` | `0x01781458` | `0x0176c6f8` | +0x14760 |
+| `SLIDE_LOGGERS_0_1_OFF` (`nfulnl_logger` object, §7.3) | `nfulnl_logger` | `0x02262828` | `0x02242a20` | +0x1fe08 |
+| `SYSTEM_UNBOUND_WQ_OFF` | `system_unbound_wq` | `0x0225ac60` | `0x0223ae60` | +0x20200 |
+| `INIT_TASK_OFF` | `init_task` | `0x0226f6c0` | `0x0224f8c0` | +0x1fe00 |
+| `ASHMEM_MISC_FOPS_OFF` | `ashmem_miscs + offsetof(miscdevice, fops)=0x10` (§7.3) | `0x023dc200` | `0x023bb5b0` | +0x20650 |
+| `SLIDE_RANDOM_BOOT_ID_DATA_OFF` (`.data` ptr slot, §7.3) | `random_table` boot_id entry + 0x8 | `0x02396a98` | `0x023762f0` | +0x204a8 |
+| `ROOT_TASK_GROUP_OFF` | `root_task_group` | `0x0246dd80` | `0x0244cd80` | +0x20f00 |
+| `SELINUX_ENFORCING_OFF` | `selinux_state` + `enforcing@0x0` (BTF) | `0x02542618` | `0x02521588` | +0x21030 |
+| `SLIDE_SYSCTL_BOOTID_OFF` | `sysctl_bootid` (§7.3) | `0x02625768` | `0x026046e8` | +0x21080 |
+
+Every entry differs from DZG1 — reuse would mis-slide/panic. An
+independent re-check script compared all 20 `target.h` `_OFF` defines
+against `vmlinux.nm`: 20/20 exact.
+
+### 7.3 Pointer/string cross-checks (no bare-string acceptance)
+
+- `nfulnl_logger` (`0x02262828`): first qword in the raw kernel =
+  `0xffffffc0096ba44f` → image offset `0x016ba44f`; the
+  `"nfnetlink_log\0"` byte string occurs exactly ONCE in the kernel at file
+  offset `0x016ba44f`. String ↔ object mutually proven.
+- `loggers` (`0x02262770`, first qword `0x0` at rest — no logger registered
+  in the static image) vs `nfulnl_logger` (`+0xb8`): distinct objects, roles
+  kept separate per PORTING.md §3.
+- `random_table` (`0x02396990`): entry 4 (`0x2396a90`, 64 B/entry) has
+  `procname → "boot_id"`, `.data` slot file offset `0x02396a98`, current
+  value `0xffffffc00a625768` = `KIMAGE_BASE + 0x02625768` = `sysctl_bootid`
+  symbol address. Pointer slot ↔ storage mutually proven; restore target is
+  the symbol, not a guess.
+- `ashmem_miscs` (`0x023dc1f0`, plural on this kernel as on DZG1) + BTF
+  `miscdevice.fops` byte offset `0x10` (`bits_offset 128`) → `0x023dc200`.
+- `selinux_state.enforcing` is the first member (BTF `bits_offset 0`), so
+  the enforcing address equals the symbol address.
+
+### 7.4 Tracefs event ID + worker caller (offline derivation)
+
+- BTF `trace_type`: `__TRACE_LAST_TYPE = 20` (same enum position as
+  PORTING.md §5, re-read from the EZIF dump, not assumed).
+- `__event_sched_blocked_reason 0x0221f160` −
+  `__start_ftrace_events 0x0221eeb0` = `0x2B0`; `/8` = index `86`
+  (zero-based); event ID = `20 + 86 = 106`. The numeral matches DZG1 by
+  coincidence — the subtraction was recomputed from the EZIF ELF.
+  Device `id`-file read still required (`TODO(validation)`); per-boot
+  caller-minus-offset 64-KiB-alignment + P0-range checks stay mandatory.
+- `worker_thread` (`0x000db2fc`): blocking `bl schedule` at `0xdb398`,
+  return PC = next instruction `0xffffffc0080db39c` → caller off
+  `0x000db39c` (= `worker_thread+0xA0`).
+
+### 7.5 BTF layouts (raw `bits_offset/8`, non-byte-aligned rejected)
+
+```text
+sizeof(struct file_operations) = 0x110
+file_operations.unlocked_ioctl = 0x50, compat_ioctl = 0x58, mmap = 0x60
+file_operations.open = 0x70, release = 0x80, splice_read = 0xc8
+file_operations.show_fdinfo = 0xe0
+miscdevice.fops = 0x10
+selinux_state.enforcing = 0x0
+task_struct.usage = 0x40, prio = 0x84, normal_prio = 0x8c
+task_struct.sched_task_group = 0x348
+task_struct.pi_lock = 0x924, pi_waiters = 0x938
+task_struct.pi_top_task = 0x948, pi_blocked_on = 0x950
+sizeof(struct page) = 0x40
+page.compound_head = 0x08 (union@0x8 + struct@0), slab_cache = 0x18
+(struct slab.slab_cache bits 192 within the page overlay), page_type = 0x30
+sizeof(struct rt_mutex_waiter) = 0x58
+waiter: pi_tree_entry = 0x18, task = 0x30, lock = 0x38
+waiter: wake_state = 0x40, prio = 0x44, deadline = 0x48, ww_ctx = 0x50
+ctl_table.data = 0x8
+nf_logger: size = 32, name = 0x0
+workqueue_struct.dfl_pwq = 0xb0
+pool_workqueue: pool = 0x0, wq = 0x8, work_color = 0x10, refcnt = 0x18
+pool_workqueue: nr_in_flight = 0x1c, nr_active = 0x5c, max_active = 0x60
+worker_pool.worklist = 0x28, nr_idle = 0x3c
+work_struct: data = 0x0, entry = 0x8, func = 0x18
+configfs_buffer: page = 16, needs_read_fill = 80, bin_buffer = 88
+configfs_buffer: bin_buffer_size = 96, cb_max_size = 100
+```
+
+All match the shared-header structure; each was re-read from the EZIF raw
+dump (byte-aligned members only), none copied.
+
+### 7.6 Physical load (DTB re-verified, loader signed)
+
+- `P0_PHYS_OFFSET = 0x80000000`: proven from EZIF's own `vendor_boot.img`
+  DTB (first DTB at image offset `0xe1b000`, 379345 B):
+  `gunyah_hyp_region@80000000` with reg `base 0x80000000 size 0xe00000`.
+  Same numeral as DZG1, independently derived — not carried over.
+- `P0_KERNEL_PHYS_LOAD = 0x80080000`: memstart + ARM64 TEXT_OFFSET
+  convention for the 4 KiB-granule Image (`text_offset 0`), same-board
+  (SM-S9210/pineapple) DZG1 hardware precedent (full chain passed through
+  it). S2 attempted loader disassembly: EZIF `abl.elf` is signed (no
+  section headers, zero readable strings) — no offline byte-proof
+  available. The value is recorded with this evidence chain; a wrong value
+  fails safe (P0 oracle fingerprint mismatch → gate/probe verification
+  aborts before destructive steps), and linear-map self-consistency must
+  still be confirmed on EZIF hardware (`TODO(validation)`, S6 gate).
+
+### 7.7 P0 fingerprints
+
+Generated from the EZIF raw kernel for all 32 slides `0x000000–0x1f0000`
+(`P0_ORACLE_PROBE_OFFSET = 0x1f0000`), 8 qwords per row at page offsets
+`0x000/0x200/…/0xe00`; all 256 source qwords read back verified.
+Committed as `src/targets/e1q-S9210ZHU6EZIF/p0_fingerprint.h`.
+Row `0x000000` starts `0x54fffee16a15011f…` (DZG1 starts `0xa9017fff…`) —
+different kernel, different table.
+
+### 7.8 Explicitly NOT measured (TODO, never guessed)
+
+- `SLIDE_PSELECT_WORD_SHIFT`: hardware-tuned per firmware (in-repo
+  pineapple 6.1 values diverge: essi `0`, DZG1/S9280 `3`, dm3q-FZF5 `4`).
+  Static bounds from the EZIF ELF: `PSELECT_ROUTE_NFDS = 320` →
+  5 words/set (15-word read/write/exception array); BTF compact waiter =
+  11 qwords ⇒ SHIFT ∈ {0..4}; EZIF `core_sys_select` frame is `0x1c0` with
+  on-stack in/out/ex copies at `[sp+0x50, +0x78, +0xa0)` for nfds=320.
+  Which copied qword overlaps waiter qword zero is only observable on
+  device (DZG1's `3` must NOT be copied). `target.h` carries a loud
+  compile-time `TODO(offsets)` interlock.
+- `SKB_DATA_DELTA`: hardware-tuned per firmware (in-repo pineapple 6.1
+  values diverge: `-0xe80` vs `-0x1000`, e.g. dm3q-FZF5). Same loud
+  `TODO(offsets)` interlock (a silent `common.h` default would be a hidden
+  guess).
+- Anti-panic guards (§4) verified present in shared code and inherited by
+  the new target without modification: `slide_commit` align/range/stale
+  (`slide_app.c:2917+`), tracefs quorum `SLIDE_TRACEFS_MIN_VOTES` default 2
+  (`slide_app.c:214`), P0 gate `hits==1 && changed==0` (`pipe.c:1175`),
+  fops full-table audit + `owner==0` (`fops.c:39-96,412,519`), configfs
+  `ERANGE` (`fops.c:275`, `util.c:2808`), pipe same-page + `is_direct`
+  checks (`pipe.c`, `fops.c`, `root.c`).
