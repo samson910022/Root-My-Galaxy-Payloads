@@ -1138,3 +1138,51 @@ survival vs four blind-flip panics on the ungated build); fail-open leg
 `8ae3860a` run 1. Read side deterministically zero (120/120) — gate
 withheld the flip correctly, but why-zero (wrong source page vs wrong
 read offset/len) is a parent-session decision.
+
+### 9.12 Whole-table pre-flip gate (gate v2) on boot `55936f1a` (2026-11-03): 0 HIT, 120/120 zero-byte reads — 原語 pre-trigger 失效
+
+Follow-up to §9.11, same boot `55936f1a` (no reboot in between), single round,
+no second exploit. Mother-session hypothesis: the post-flip audit
+(`fops.c:48`, full-table ~232 B read) succeeds, so a whole-table pre-trigger
+read might behave differently from the 8 B single-slot read under the blob
+primitive (window/pos computation). Gate v2 tests exactly that, zero risk
+(still pre-trigger, still EZIF-gated). Full record:
+`/mnt/240G_SSD/opencode_tmp/s3_gatev2/verdict.md` + durable
+`ezif_gatev2_boot55936f1a.log` (190886 B, SHA-256 `39e1add5…`).
+
+- Gate change (`src/main.c`, uncommitted): `configfs_read_once(fd, fake_fops,
+  gate_table, 232)` where `232 = FOPS_SHOW_FDINFO_OFF (0xe0) + 8` — the exact
+  span enum from the `fops.c:40` audit (29 qwords; `FOPS_IOCTL_OFF/8` = index
+  10, in range; length derived from source, not guessed). In-memory compare at
+  index 10 vs `text_addr(ASHMEM_IOCTL)`; 5 retries + fresh prepare + clean
+  exit unchanged; miss logs now carry `ret=` byte counts.
+- NDK r29 `release` → exit 0; `.so` still **104128 B**, new SHA-256
+  `e25561fc85b1021bffecbe424da2168976cd8c47814fcf3867f80760ddf5d720`
+  (md5 `e1ef3582…`, `pre-flip gate` strings ×5; old `071425fa…` retired).
+  e3q control rebuild → exit 0, 104128 B, `pre-flip gate` strings ×0
+  (isolation maintained). Root runner unchanged (27264 B, `c49a6557…`).
+- Idle gate on unchanged boot: up ~8270 s, load settling 6.24→3.34→3.10,
+  `boot_completed=1`, no `kernelsu`, `Enforcing`. Push verified pre-fire
+  (device md5 = local, ELF magic ok).
+- Run (ONE invocation, `ATTEMPTS=24`, TIMEOUT 300/180,
+  `STACK_WRITER_DELAY_USEC=125000`): all 24 attempts `slide-kaslr-ok`
+  unanimous `slide=0x170000` (same per-boot value as §9.11) →
+  `fops-page-held` → gate 5/5 MISS every attempt → `production skipped, no
+  flip performed` → `failed status=1`; final `exploit failed after 24
+  independent attempts` (runner EXIT=255). **0 HIT, 0 `writer-enter`,
+  0 flips.**
+- Read detail (the key signal): `pre-flip gate read failed … ret=0 want=232
+  errno=0` ×**118**, `ret=-1 want=232 errno=34` (ERANGE) ×**2**,
+  `ret=232` ×**0**. Every miss `read=0000000000000000
+  want=ffffffc008eb4e8c` (want tracks the live slide — addressing is fine).
+- Post-run: SAME boot `55936f1a` (no reboot, no panic), `Enforcing`, driver
+  absent, pushed hashes identical. 24 reparented nanosleep orphans killed
+  (0 remain, same client-timeout phenomenon as §9.11).
+
+Status: **整表讀仍 0 位元組 — 「原語 pre-trigger 失效」** (whole-table
+pre-trigger reads EOF exactly like single-slot reads; blob window/pos is not
+length-sensitive here). No further length variants per protocol. Fail-closed
+leg re-proven (two consecutive gated runs, zero panics, vs four blind-flip
+panics ungated); fail-open leg (HIT → writer) still unobserved. Chain root
+still ONLY from boot `8ae3860a` run 1. Verification items (a)–(e) unrunnable
+(never entered writer); Manager skipped per protocol.
