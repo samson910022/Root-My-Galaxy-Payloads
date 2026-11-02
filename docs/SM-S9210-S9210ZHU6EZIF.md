@@ -778,6 +778,17 @@ method as the DZG1 record. Ground truth remains hardware late-load.
   machine still needs the same treatment. DDK-side (`make clean`
   quirk, fallback-version path) is fully logged and replayable.
 
+  Update 2026-11-03 (App route, boot `de00aae0` — see §9.16): of the
+  §9.7 verification items, (a) `su -c id`, (c) post-root SELinux, and
+  (d) live-driver version are now CLOSED (device-measured, with a
+  shell-side Enforcing control, `ksud 3.3.1 (uapi: 5)`); (b) Manager pairing is PARTIALLY
+  closed (package `me.weishu.kernelsu` v3.3.1/32680 proven via
+  dumpsys, `Working <LKM>` UI still needs a user screenshot).
+  Still TODO after this update: resetprop regression matrix,
+  repeatability/reboot matrix, Manager UI screenshot, and any repo
+  release/feed publish (the App run used the App's built-in assets —
+  it changes nothing about the repo `.so`/KSU release gating).
+
 ### 9.6 Full-chain hardware record (2026-11-02, boot `8ae3860a`)
 
 Single-round `LD_PRELOAD` run of the §8.6 release `.so`
@@ -876,6 +887,14 @@ trigger per boot once KSU is late-loaded — same-boot re-invoke
 panics**; post-late-load verification needs a root channel that
 survives the Enforcing restore (temp-root socket currently does
 not), otherwise verify via reboot + fresh run ordering.
+
+Update 2026-11-03 (App route, boot `de00aae0` — see §9.16):
+`su` + driver-version + SELinux items are now CLOSED by an
+independent second root (S24 App 0.3.4-s24.1 built-in assets, not a
+repo `.so` re-run). Manager pairing stays PARTIAL (package version
+proven, `Working <LKM>` UI still needs a user screenshot).
+Control-channel `ksud debug`, resetprop matrix, and
+repeatability/reboot matrix remain TODO.
 
 ### 9.7 Single-round re-run on boot `92b4814c` (2026-11-02) — PANIC pre-root, NO ROOT
 
@@ -1421,3 +1440,83 @@ whole rounds (§9.9/§9.14 burned single tickets without knowing it). Port
 checklist addition: after any macro/budget change, `-E`-expand the
 target's actual config and grep the production path for the bound before
 claiming the budget exists.
+
+### 9.16 App 端到端 root 成功（S24 0.3.4-s24.1，boot `de00aae0`）
+
+Second independent EZIF root, via a different route on a different
+machine: the user ran the S24 App (v0.3.4-s24.1 / versionCode 18, with
+built-in exploit + ksud assets) over `ssh` + `adb` from host
+`ubuntu-13g1` and reached granted root. This worker performed
+forensics ONLY (38 logs + `SHA256SUMS.txt` + `verdict.md`, all under
+`/mnt/240G_SSD/opencode_tmp/ezif_approot_20261103/`, `sha256sum -c`
+clean): no exploit run, no reboot, no repo change, no commit. Per the
+build record the App's built-in assets correspond to source commit
+`58a6772` (= this branch HEAD); the APK payload bytes themselves were
+not extracted over adb, so that correspondence is recorded as stated,
+not device-re-verified.
+
+Key values (all device-measured 2026-11-02T21:45–21:46Z; device local
+2026-11-03 05:45–05:46, UTC+8):
+
+| Item | Value | Evidence file (SHA-256 in `SHA256SUMS.txt`) |
+| --- | --- | --- |
+| boot_id | `de00aae0-f7cd-4789-8a79-274b1d8ad9a4` (identical in `a01` and `h02`) | `a01_boot_id.log` (`47616568…`), `h02_boot_completed_extra.log` (`49ac6cbd…`) |
+| PDA / display / incremental | `S9210ZHU6EZIF` / `CP2A.260605.016.S9210ZHU6EZIF` / `S9210ZHU6EZIF` | `a04_pda_version.log` (`b6ddc25d…`) |
+| Fingerprint | `samsung/e1qzhx/qssi_64:17/…` (system) + `samsung/e1qzhx/e1q:17/…` (build) | `a04`, `a07_fingerprint_all.log` (`042a0813…`) |
+| Android / SDK / patch / model | release `17`, sdk `37`, patch `2026-09-05`, `SM-S9210`, `e1q` | `a05_android_release.log` (`c282e26a…`) |
+| Kernel | `6.1.162-android14-11-34343818-abS9210ZHU6EZIF … #1 SMP PREEMPT Sun Sep 20 01:29:53 UTC 2026`, `aarch64 Toybox` | `a06_kernel_version.log` (`07889a15…`) |
+| Boot state | `boot_completed=1`, bootreason `reboot`, uptime `6039.00 s` (~100 min) | `a02_uptime.log` (`e228ed67…`), `a03_boot_completed.log` (`e63fce49…`) |
+| `su -c id` | `uid=0(root) gid=0(root) groups=0(root) context=u:r:ksu:s0` (×3: `b01`, `b02`, `h01`) | `b01_su_id.log` (`f358f3ea…`), `b02_su_id_getenforce.log` (`14b79739…`) |
+| SELinux | `su -c getenforce` = `Enforcing`; shell `getenforce` = `Enforcing` (control) | `b02` (`14b79739…`), `b03_shell_getenforce.log` (`24252365…`) |
+| `whoami` / `/data/adb` | `root`; `drwx------ 10 root root … /data/adb` | `b04_su_whoami_lsdatadb.log` (`fc38901a…`) |
+| `/proc/modules` head | `kernelsu 237568 4 - Live 0x… (O)` (full 200+ lines archived) | `c01_proc_modules.log` (`55efae05…`); `c02_lsmod.log` (`9a0ebdb9…`) agrees |
+| `su -c dmesg` | `KernelSU: handle_setresuid …`, `su->ksud`, Samsung KDP task-scoped credential install (132 lines + 100-line tail) | `c03b_dmesg_su_kernelsu.log` (`c6d5f57c…`), `c03c_dmesg_su_tail.log` (`658dacce…`) |
+| ksud version | `ksud 3.3.1 (uapi: 5)` via `su -c 'ksud --version'` | `c04_ksud_version.log` (`70f1bc37…`) |
+| ksud path | `which ksud` = `/data/adb/ksu/bin/ksud` (symlink → `/data/adb/ksud`) | `c05_ksud_which_help.log` (`230ac038…`) |
+| KernelSU Manager | `me.weishu.kernelsu`, `versionName=v3.3.1`, `versionCode=32680`, `lastUpdateTime=2026-11-02 23:02:39` | `d03_dumpsys_kernelsu.log` (`d48b1c6c…`) |
+| S24Root App | `dev.samson.s24root`, `versionName=0.3.4-s24.1`, `versionCode=18`, `lastUpdateTime=2026-11-03 03:43:47` | `e01_dumpsys_s24root.log` (`f0b88ef0…`) |
+
+Notes and caveats (recorded honestly, not smoothed over):
+
+- On-device `/data/adb/ksud` is `4990848 B` (2026-11-03 05:39) —
+  NOT byte-identical to the repo-built v3.3.1 ksud `5065680 B`
+  (`fde99b5a…`, §9.4). The version string still reports `3.3.1
+  (uapi: 5)`, so the version finding stands while the size delta
+  (different strip/compress pipeline in the App asset build) is noted
+  for the record (`c06_data_adb_list.log`, `8962a5be…`).
+- `lastkmsg` slots 132–136 exist (latest
+  `136_20261103_040451_KP.log.gz`, 700214 B); NOT pulled, timestamps
+  only (`f02_dumpstate_lastkmsg.log`, `2e2ec42a…`). This boot started
+  ~04:04–04:05 local (uptime 6039 s at 05:45), which coincides with the
+  #136 timestamp — recorded as timing coincidence, with NO claim about
+  panic vs normal reboot.
+- `logcat -d -s S24Root:*` is empty (0 lines, rc=0); the wider grep
+  shows only system-side mentions (freeze/unfreeze, `libksud.so`,
+  AppsFilter) — no App custom lines, logcat never cleared
+  (`g01`/`g02`/`g03`).
+- Expected non-root artifacts, all archived as-is: `c03` non-root
+  dmesg `Permission denied` (superseded by `c03b`/`c03c` under su);
+  `c05` tail `ksud: inaccessible or not found` (non-su PATH, `su`
+  context has the ksud PATH); `c06` rc=1 solely from three absent
+  `*version*` files; `d01`/`d02` `SecurityException: … user 150`
+  header with complete listings.
+
+Relation to run 1 and scoreboard (one defined口径):
+
+- Run 1 (§9.6, boot `8ae3860a`) = adb full chain with a manually
+  pushed repo `.so` (`9c6cf160…`) + staged ksud: first independent
+  root. This App run (boot `de00aae0`) = full chain with the App's
+  built-in assets (`7b68f38d…` 104128 B exploit + `fde99b5a…` ksud,
+  source commit `58a6772`): second independent root.
+- Scoreboard口径 (frozen): the denominator counts EZIF hardware rounds
+  with a decisive outcome (granted root OR panic); fail-closed clean
+  aborts (§9.11/§9.12, 0 flips / 0 panics) do not score. adb manual
+  route stays **1/6** (1 root + 5 panics: run-2 post-load misc,
+  #131/#132 PI, #133 ioctl-CFI, #134 lseek-CFI). App route opens at
+  **1/1**. Combined EZIF scoreboard: **1/6 → 2/7** (denominator +1 for
+  this App round, numerator +1 for its success).
+- Blocker impact: §9.5/§9.6 items (a) `su -c id`, (c) post-root
+  SELinux, (d) live-driver version → CLOSED; Manager pairing → PARTIAL
+  (package version proven, `Working <LKM>` UI still needs a user
+  screenshot). Still TODO: `ksud debug` control-channel check,
+  resetprop matrix, repeatability/reboot matrix, repo release/feed.
