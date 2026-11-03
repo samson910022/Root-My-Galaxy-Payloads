@@ -95,23 +95,24 @@ DZG1 reference: [`SM-S9210-S9210ZHS6DZG1.md`](SM-S9210-S9210ZHS6DZG1.md)
 | Binary | 6 (`ZHS6`) | 6 (`ZHU6`) | Same binary digit, still a different build — full re-audit required |
 | Regions | BRI sales, OZS multi-CSC | TGY + BRI OZS in this branch; CHC separate branch | Scope narrower than "all OZS"; feed `models` must reflect this in S6 |
 | Kernel image / SHA | `38005248` bytes, SHA-256 `c34386a0…` recorded | `38140416` bytes (`0x245fa00`), SHA-256 `ce462331…` (S1 measured) | No reuse — values differ as expected |
-| Kernel release / vermagic | `6.1.145-android14-11-33419968-abS9210ZHS6DZG1` | `6.1.162-android14-11-34343818-abS9210ZHU6EZIF` / `TODO(KSU)` (S1 read banner; KSU rebuild pending) | No reuse; KSU `vermagic` must match exactly |
+| Kernel release / vermagic | `6.1.145-android14-11-33419968-abS9210ZHS6DZG1` | `6.1.162-android14-11-34343818-abS9210ZHU6EZIF` (S1 banner read; KSU `vermagic` exact-match proven §9, see §9.2) | No reuse; KSU `vermagic` must match exactly |
 | Audited offsets (`KMALLOC_CACHES`, `SLIDE_NFULNL_LOGGER_NAME`, `CALL_USERMODEHELPER_EXEC_WORK`, `SYSTEM_UNBOUND_WQ`, `INIT_TASK`, `ROOT_TASK_GROUP`, `SELINUX_ENFORCING`, `ASHMEM_*`, `ANON_PIPE_BUF_OPS`, logger objects, boot-id pointers, misc fops, tracefs caller) | All recorded in DZG1 doc + `src/targets/e1q-S9210ZHS6DZG1/target.h` | S2 measured 2026-11-02 from EZIF ELF/BTF only — full table + DZG1 deltas in §7; every entry differs from DZG1 (no reuse). Symbol on this kernel is the plural `ashmem_miscs`; macro keeps the shared name at `ashmem_miscs + 0x10` (BTF `miscdevice.fops` byte `0x10`) | Copying `target.h` and renaming is FORBIDDEN (would boot-panic / mis-slide) |
 | BTF struct layouts (file_operations, page, task, rt_mutex_waiter, configfs, workqueue, selinux_state) | Match S9280 profile | S2 re-dumped from EZIF BTF (`format raw` byte offsets) — all match the template structure, each re-verified, none copied (see §7). No reuse without byte-level proof — proof recorded | No reuse without byte-level proof |
 | P0 table (`p0_fingerprint.h`, `P0_ORACLE_PROBE_OFFSET`, `P0_PHYS_OFFSET`, `P0_KERNEL_PHYS_LOAD`) | `0x1f0000` probe, `0x80000000` / `0x80080000`, 42 address words differ from S9280 | S2 regenerated from EZIF raw kernel: all 32 slides × 8 qwords + 256-qword readback verified (`p0_fingerprint.h` committed). `P0_PHYS_OFFSET = 0x80000000` DTB-proven (EZIF vendor_boot DTB `gunyah_hyp_region@80000000`, reg base `0x80000000`); `P0_KERNEL_PHYS_LOAD = 0x80080000` = memstart + ARM64 TEXT_OFFSET with same-board (SM-S9210/pineapple) hardware precedent — `TODO(validation)` linear-map self-consistency on EZIF hardware | Reuse across firmware is explicitly unsafe (cf. DZG1 §P0) |
 | Slide params (`SLIDE_TRACEFS_EVENT_ID`, `WORKER_CALLER_OFF`, `PSELECT_WORD_SHIFT`, bank geometry, `SKB_DATA_DELTA`, `TASK_STRIDE`, `LOCK_OFF`) | `106` / `0xdb1a0` / `3`, e1s-style geometry, `-0xe80`, `0x1c0`/`0x5200`, default 15 slabs | Event ID `106` + caller `0x000db39c` derived from EZIF ELF (see §7; numeral 106 is recomputed, not copied). `SLIDE_PSELECT_WORD_SHIFT` + `SKB_DATA_DELTA` stay `TODO(offsets)` — hardware-tuned per firmware (see §7); bank/slab geometry keeps the invariant cross-target structure, re-validation on hardware still `TODO(validation)` | DZG1 values are hints for bring-up order only, never defaults |
-| KernelSU pair | v3.2.5 feed pair + v3.3.0 Phase-D candidate (one 2026-10-03 success) | `TODO(KSU)` — rebuild + `check_symbol` + `modinfo` + static audit + hardware runs | Do NOT copy DZG1 `.ko`/`ksud` |
+| KernelSU pair | v3.2.5 feed pair + v3.3.0 Phase-D candidate (one 2026-10-03 success) | v3.3.1 primary + v3.3.0 fallback — static build + audit DONE §9 (vermagic exact, 0 missing/0 CRC); hardware pairing PARTIAL (§9.16) | Do NOT copy DZG1 `.ko`/`ksud` |
 | Hardware validation | Device-tested 2026-09-11 (v3.2.5), candidate 2026-10-03 (v3.3.0) | `TODO(validation)` — no runs yet | S0 performs zero runs |
 
 ## 3. Stage plan S0–S6 and acceptance checklists
 
 Numbering follows `PORTING.md` §1–§9. S0 is this file only.
 
-- [ ] **S0 — skeleton (this stage). ACCEPT:** this md exists; identity table
+- [ ] **S0 — skeleton (this stage). ACCEPT (HISTORICAL snapshot, superseded by S1–S5 + §9.16):** this md exists; identity table
   present with `TODO(...)` on every unmeasured field; DZG1 diff table present;
   S0–S6 plan + anti-panic list present; NO `src/targets/e1q-S9210ZHU6EZIF/`
   directory, NO `support/targets-v*.json` edit, NO binaries (`.so`/`.ko`/`zip`/`img`),
-  NO fabricated SHA/offsets/vermagic. `git status` shows exactly one new file.
+  NO fabricated SHA/offsets/vermagic. `git status` at S0 showed exactly one new file.
+  (Current branch: 9 files incl. candidate artifacts per §6/§9.4/§9.15 — `support/` feed still untouched by design.)
 - [x] **S1 — provenance + extraction (PORTING.md §1–§2). DONE 2026-11-02:**
   samloader four-part transcripts (TGY + BRI, identical); download command +
   ZIP/AP names recorded in §1; `boot.img`/`kernel`/`vendor_boot.img` sizes +
@@ -142,19 +143,19 @@ Numbering follows `PORTING.md` §1–§9. S0 is this file only.
   only; `make TARGET=e1q-S9210ZHU6EZIF
   ANDROID_NDK_HOME=/home/samson1357924/Android/Sdk/ndk/29.0.14206865 info`
   passes (release NOT run).
-- [ ] **S3 — physical load + slide params (PORTING.md §4–§5). ACCEPT:** sboot
+- [x] **S3 — physical load + slide params (PORTING.md §4–§5). STATIC DONE + ON-DEVICE TUNED (§8.6: SHIFT=3/DELTA=-0xe80 HIT; MM 0x400 slabinfo-observed):** sboot
   `text_offset+0x80000000` derivation with file offset + disassembly (no S25U
   copy); `P0_PHYS_OFFSET` / `P0_KERNEL_PHYS_LOAD` proven; tracefs event ID from
   device `id` file or `(__event - __start)/8 + __TRACE_LAST_TYPE` math;
   `worker_thread` post-`bl schedule` caller derivation; per-boot caller-minus-offset
   64-KiB-alignment + P0-range verification; `SLIDE_PSELECT_WORD_SHIFT` from
   `pselect6`/`do_pselect` disassembly + BTF waiter layout (0 is a finding, not a default).
-- [ ] **S4 — target headers + P0 table (PORTING.md §5–§6). ACCEPT:** new
+- [x] **S4 — target headers + P0 table (PORTING.md §5–§6). DONE (headers authored from EZIF data only; release 104128 B + SHA recorded §9.15; artifact published in `58a6772`):** new
   `src/targets/e1q-S9210ZHU6EZIF/target.h` + `p0_fingerprint.h` authored from
   EZIF data only; all 32 slides × 8 qwords generated with 256-qword readback;
   `TARGET=e1q-S9210ZHU6EZIF release` builds fixed-size `.so`; artifact copied to
   `artifacts/e1q-S9210ZHU6EZIF/` with size + SHA-256 recorded.
-- [ ] **S5 — KernelSU module (PORTING.md §7). ACCEPT:** Samsung patch applies
+- [x] **S5 — KernelSU module (PORTING.md §7). STATIC DONE §9 (dual v3.3.1+v3.3.0, vermagic exact, audit 0 missing/0 CRC; HW pairing PARTIAL §9.16):** Samsung patch applies
   cleanly to the pinned KSU version; `check_symbol` vs EZIF `vmlinux.elf`;
   `CONFIG_MODULE_FORCE_LOAD` / `CONFIG_MODVERSIONS` inspected; `modinfo`
   reports exact EZIF `vermagic`; debug sections stripped; KO embedded as exact
@@ -246,7 +247,7 @@ re-verified against the EZIF target before S6 hardware runs.
   the helper retries plain `late-load` only when the module is not live after
   the ephemeral attempt (verify-gated). Keep until the CLI contract is fixed.
 
-## 5. TODO index (S1 done: provenance/kernel resolved; offsets/KSU/validation remain TODO)
+## 5. TODO index (S1–S5 static done; S6 validation partial — see §9.16)
 
 - [x] `TODO(provenance)` → DONE S1: samloader TGY/BRI transcripts, four-part
   version proof, fota.zip fingerprint/build-ID/changelist, product name (§1).
@@ -255,19 +256,20 @@ re-verified against the EZIF target before S6 hardware runs.
   kernel release string. Still open for S2: BTF interval, sboot phys-load proof.
 - `TODO(offsets)`: all ELF/BTF/DTB-derivable `*_OFF` macros, BTF layouts,
   event ID, worker caller, full P0 table + readback DONE S2 (see §7).
-  Still open: `SLIDE_PSELECT_WORD_SHIFT` + `SKB_DATA_DELTA` (hardware-tuned
-  per firmware — S3/S6 must measure on EZIF hardware; both are loud
-  compile-time `TODO(offsets)` interlocks, never DZG1 copies), plus
-  `P0_KERNEL_PHYS_LOAD` linear-map self-consistency (offline derivation
+  Hardware-tuned `SLIDE_PSELECT_WORD_SHIFT=3` + `SKB_DATA_DELTA=-0xe80`
+  CLOSED on-device §8.6 (was loud `TODO(offsets)` interlock, never DZG1 copy).
+  Still open: `P0_KERNEL_PHYS_LOAD` linear-map self-consistency (offline derivation
   recorded in §7, hardware confirmation pending).
-- `TODO(KSU)`: pinned KSU version, Samsung patch record, `check_symbol`,
-  `modinfo` vermagic, KO + ksud sizes + SHA-256, static audit.
+- [x] `TODO(KSU)` → STATIC DONE §9: pinned KSU versions (v3.3.1+v3.3.0), Samsung patch record, `check_symbol`,
+  `modinfo` vermagic exact, KO + ksud sizes + SHA-256, static audit (0 missing/0 CRC).
+  HW pairing PARTIAL §9.16 (su/selinux/driver-version CLOSED; Manager UI + control-channel + resetprop + repeatability TODO).
 - `TODO(validation)`: device-measured SELinux, full-chain hardware transcript,
   KernelSU control-channel + manager evidence, repeatability/reboot/resetprop
   matrix, thermal/peak notes.
 
-## 6. S0 non-goals (explicitly NOT done; S1 update: samloader + extract done;
-S2 update: ELF/BTF/P0 measured, headers authored — release NOT built)
+## 6. S0 non-goals (explicitly NOT done at S0; updates: S1 samloader+extract done;
+S2 ELF/BTF/P0 measured + headers authored; S4 release built; S5 KSU static done;
+candidate artifacts published in `58a6772` — `support/` feed still untouched by design)
 
 - S1 DONE: `samloader` query/download + `lz4`/`tar` extraction (cf. §1 record).
 - S2 DONE 2026-11-02: `vmlinux-to-elf`/`llvm-nm`/`bpftool` runs (cf. §7);
@@ -275,8 +277,8 @@ S2 update: ELF/BTF/P0 measured, headers authored — release NOT built)
   from EZIF data only (copying DZG1 values remains forbidden — S2 verified
   every entry differs). Two hardware-tuned values are loud `TODO(offsets)`
   interlocks, not guesses; `release` NOT run (S4 scope).
-- No `support/targets-v*.json` edits (S6 only, after hardware proof).
-- No `.so` / `.ko` / `ksud` / `zip` / `img` artifacts committed.
+- No `support/targets-v*.json` edits (S6 only, after hardware proof — still untouched in this PR by design).
+- Candidate `.so` / `.ko` / `ksud` artifacts published in `58a6772` (see §9.4/§9.15 for sizes+SHA); at S0 time none existed.
 - No kernel SHA, offsets, `vermagic`, P0 rows, or KSU hashes invented to "fill
   the table". Unmeasurable-offline items stay `TODO(...)`.
 
@@ -443,7 +445,8 @@ different kernel, different table.
 - Anti-panic guards (§4) verified present in shared code and inherited by
   the new target without modification: `slide_commit` align/range/stale
   (`slide_app.c:2917+`), tracefs quorum `SLIDE_TRACEFS_MIN_VOTES` default 2
-  (`slide_app.c:214`), P0 gate `hits==1 && changed==0` (`pipe.c:1175`),
+  (`slide_app.c`, see `SLIDE_TRACEFS_MIN_VOTES`), P0 gate `verify_p0_pipe_oracle_gate`
+  (`pipe.c`, gate/probe pair contract),
   fops full-table audit + `owner==0` (`fops.c:39-96,412,519`), configfs
   `ERANGE` (`fops.c:275`, `util.c:2808`), pipe same-page + `is_direct`
   checks (`pipe.c`, `fops.c`, `root.c`).
@@ -451,7 +454,7 @@ different kernel, different table.
 ## 8. S3 build-attempt record + static re-convergence (2026-11-02, no device)
 
 S3 ran exactly the two commands below. No `target.h` value was changed,
-no feed/KSU file touched, nothing committed.
+no feed/KSU file touched at S3 time (candidate artifacts were published later in `58a6772`, `support/` still untouched).
 
 ### 8.1 `make info` — PASS
 
@@ -606,8 +609,9 @@ values, not guesses:
 - `SLIDE_PSELECT_WORD_SHIFT = 3` — gate HIT + DZG1 same-platform
   (SM-S9210/pineapple) prior. The retry7 MISS is characterized as a
   dying-boot pipeline fault, not a SHIFT finding.
-- `MM_STRUCT_SZ = 0x400` unchanged (unconditional, slabinfo-proven;
-  set in `2d124f6`, untouched here).
+- `MM_STRUCT_SZ = 0x400` unchanged (unconditional, slabinfo-observed on EZIF:
+  `mm_struct 1024 objs, 32 objperslab, 8 pagesperslab` → 32768 = ORDER3 exact;
+  set in `2d124f6`, untouched here; raw slabinfo capture path to be archived).
 
 Verification (no `probe_mm.sh` exists in this repo — equivalent checks):
 
@@ -621,27 +625,31 @@ Verification (no `probe_mm.sh` exists in this repo — equivalent checks):
 - Artifact `build/e1q-S9210ZHU6EZIF/cve-2026-43499-app.release.so`:
   **104128 bytes** (Makefile fixed-size padding satisfied, no
   over-limit error), SHA-256
-  `9c6cf160b7b24eaa021d163c514c342ca4a4f850faa32ca30a61fb5a33593a51`,
+  `9c6cf160b7b24eaa021d163c514c342ca4a4f850faa32ca30a61fb5a33593a51`
+  (HISTORICAL §8.6 build — RETIRED by §9.15 `74496f5b…` (review-fix; predecessor `7b68f38d…`); current
+  `artifacts/` holds the latter, see §9.15),
   `ELF 64-bit LSB shared object, ARM aarch64, for Android 35, NDK
   r29, stripped`.
 
 Remaining gates (unchanged): tracefs `id`-file read vs offline 106,
 per-boot caller alignment + P0-range checks, `P0_KERNEL_PHYS_LOAD`
 linear-map self-consistency, full hardware chain + KSU validation
-(§8.4/§9.5). Nothing committed (working tree only).
+(§8.4/§9.5). At §8.6 time nothing was committed (working tree only);
+candidate artifacts were published later in `58a6772`.
 
 ## 9. S5 static dual-build record (2026-11-02, no device; KSU-only)
 
 Scope: build + statically audit the KernelSU LKM + ksud pair for EZIF
-TWICE — v3.3.1 (主力) and v3.3.0 (保底) — with everything else held
+TWICE — v3.3.1 (primary) and v3.3.0 (fallback) — with everything else held
 constant (same DDK, same Kconfig, same target vermagic; only the KSU
-base differs). No feed touched, no repo binaries added, nothing
-published. Workdir (all artifacts, never committed):
+base differs). No feed touched. At §9 time no repo binaries were added
+(workdir only); candidate artifacts were published later in `58a6772`
+(see §9.4/§9.15). Workdir:
 `/mnt/240G_SSD/opencode_tmp/EZIF_ksu/`.
 
 ### 9.1 Build matrix
 
-| Axis | v3.3.1 (主力) | v3.3.0 (保底) |
+| Axis | v3.3.1 (primary) | v3.3.0 (fallback) |
 | --- | --- | --- |
 | Upstream commit | `0c0fdb960178fa12d80d6cbcfdcb6ad8be6a865d` (tag `v3.3.1`, 2026-10-12) | `932014ab5b2c9b74a3d11e2ec4d17dd10fc944e2e` (tag `v3.3.0`, 2026-08-28) |
 | `rev-list --count` / KSU version | 2680 / **32680** | 2601 / **32601** |
@@ -726,7 +734,7 @@ Audit-shape delta (221/81 vs 202/70) is expected: v3.3.1 adds
 gates — 0 missing, 0 CRC — hold on both. No Kconfig downgrade was
 used to force a pass.
 
-### 9.4 Artifacts (sizes + SHA-256; workdir only, NOT in git)
+### 9.4 Artifacts (sizes + SHA-256; published in `58a6772` — filenames below are the repo paths)
 
 Stripped with NDK r29 `llvm-strip -d`; ksud via
 `cargo build --locked --release --target aarch64-linux-android -p
@@ -736,16 +744,17 @@ a bare host-`cc` link fails on `-llog/-lunwind`, so the linker env
 is load-bearing). Both ksuds: aarch64 PIE, `linker64`, `for Android
 35, built by NDK r29`.
 
-| File | Bytes | SHA-256 |
+| File (repo path) | Bytes | SHA-256 |
 | --- | --- | --- |
-| `android14-6.1_kernelsu-e1q-S9210ZHU6EZIF-kdp-v3.3.1.ko` (stripped) | 432656 | `af640cdae6a9414dfe7b2eebe60e0d3e428b8f26862c14c7348f88e7a3863e4a` |
-| `android14-6.1_kernelsu-e1q-S9210ZHU6EZIF-kdp-v3.3.0.ko` (stripped) | 406160 | `3f3e558ba808eb67566fd97fa5a70aaed50f4739fc5c75d124d5447b011872bc` |
-| `e1q-v3.3.1-unstripped.ko` (BTF/debug retained) | 6210312 | `9fe7a72faf06e33d288259898f8f6d23d7a2d5c93a049f03def201e785f7d551` |
-| `e1q-v3.3.0-unstripped.ko` (BTF/debug retained) | 5851848 | `829ee8bef7ed39e3af0ad54f8e3dc59433c4a7743f6dc2fdfad9713f5c823110` |
-| `ksud-e1q-S9210ZHU6EZIF-kdp-v3.3.1` | 5065680 | `fde99b5a129e5714fe6f598cf8276c76d2cbaf1a7f4e6ce9ae69d5ebca0abe61` |
-| `ksud-e1q-S9210ZHU6EZIF-kdp-v3.3.0` | 4993656 | `bc7399a38f4e78471f32f7bded3c9788f26132b22768051c5a783ef7501903e8` |
+| `kernelsu/android14-6.1_kernelsu-e1q-S9210ZHU6EZIF-kdp.ko` (v3.3.1 primary, stripped) | 432656 | `af640cdae6a9414dfe7b2eebe60e0d3e428b8f26862c14c7348f88e7a3863e4a` |
+| `kernelsu/android14-6.1_kernelsu-e1q-S9210ZHU6EZIF-v3.3.0-kdp.ko` (v3.3.0 fallback, stripped) | 406160 | `3f3e558ba808eb67566fd97fa5a70aaed50f4739fc5c75d124d5447b011872bc` |
+| `e1q-v3.3.1-unstripped.ko` (workdir only, BTF/debug retained) | 6210312 | `9fe7a72faf06e33d288259898f8f6d23d7a2d5c93a049f03def201e785f7d551` |
+| `e1q-v3.3.0-unstripped.ko` (workdir only, BTF/debug retained) | 5851848 | `829ee8bef7ed39e3af0ad54f8e3dc59433c4a7743f6dc2fdfad9713f5c823110` |
+| `kernelsu/ksud-e1q-S9210ZHU6EZIF-kdp` (v3.3.1 primary) | 5065680 | `fde99b5a129e5714fe6f598cf8276c76d2cbaf1a7f4e6ce9ae69d5ebca0abe61` |
+| `kernelsu/ksud-e1q-S9210ZHU6EZIF-v3.3.0-kdp` (v3.3.0 fallback) | 4993656 | `bc7399a38f4e78471f32f7bded3c9788f26132b22768051c5a783ef7501903e8` |
 
-(Full hashes: `SHA256SUMS.txt` in the workdir.)
+(Primary pair carries no `-v3.3.1` suffix by repo naming convention — version is tracked in §9.1/§9.2 + `kernelsu/REBUILD-e1q-v3.3.0.md`.
+Full hashes: `SHA256SUMS.txt` in the workdir. Naming rule for S6 feed: `url` MUST use the exact repo paths above.)
 
 Asset-pipeline proof (v3.3.0 tree): swapping the embedded
 `android14-6.1_kernelsu.ko` asset to the v3.3.1 module and
@@ -801,7 +810,7 @@ Invocation mirrors the DZG1 manual route (no `SLIDE_ONLY`):
 P0_ATTEMPT_TIMEOUT_SEC=180 LD_PRELOAD=…ezif_app.release.so
 /system/bin/id`
 
-Run 1 (same boot, attempt **1/24** — full chain, transcript
+Run 1 (same boot, attempt **1/24** — attempt index within this single round, NOT a success rate — full chain, transcript
 `run1_ezif_clean.log` retained in workdir scratch):
 
 ```text
@@ -871,7 +880,7 @@ Run 2 (same boot, KSU live, re-invoke for a fresh root window):
   (volatile, as expected). Per panic protocol: stopped, pulled
   lastkmsg, no rapid re-fire.
 
-Boot对照:
+Boot comparison:
 
 | Field | Before (exploit boot) | After |
 | --- | --- | --- |
@@ -949,7 +958,7 @@ late-load, so verification items (a)–(d) could not run.
   `/mnt/240G_SSD/opencode_tmp/EZIF_panic/` (`ezif_s3verify_boot92b4814c.log`
   + `#131` zip + `dumpstate_latest_after_s3verify.log.gz`).
 
-Boot对照 (this round):
+Boot comparison (this round):
 
 | Field | Before (exploit boot) | After |
 | --- | --- | --- |
@@ -1012,7 +1021,7 @@ late-load, so verification items (a)–(e) could not run. Full record:
   writeback. Rule: **after ANY panic-reboot, re-push + re-verify before the next
   round**; retry2 on-device copies are garbage and must not be reused unpushed.
 
-Boot对照 (this round):
+Boot comparison (this round):
 
 | Field | Before (exploit boot) | After |
 | --- | --- | --- |
@@ -1062,7 +1071,7 @@ single round, no second exploit. Full record:
   ENTIRELY ABSENT (retry2's were zero-filled) — panic before f2fs writeback
   has two faces. **After ANY panic-reboot, re-push + re-verify.**
 
-Boot对照:
+Boot comparison:
 
 | Field | Before (exploit boot) | After |
 | --- | --- | --- |
@@ -1104,16 +1113,19 @@ table, never enters the writer).
 - `pr_warning` (not `pr_error`) on the 5-miss path: `pr_error` calls
   `exit(-1)` (`src/kernelsnitch/utils.h`), which would skip the
   `pipe_prepare_child` cleanup and violate the `return 1` contract.
-- Scope (hard constraint): `src/main.c` `#else` single-shot region only +
+- Scope (historical §9.10 design; gate has since been REVERTED in `19418fc` — see §9.12-§9.13):
+  `src/main.c` `#else` single-shot region only +
   one macro `#define APP_FOPS_PREFLIP_GATE 1` in
-  `src/targets/e1q-S9210ZHU6EZIF/target.h`. No offsets/SHIFT/DELTA/MM/
+  `src/targets/e1q-S9210ZHU6EZIF/target.h` (macro REMOVED from `target.h` in the
+  retry-lottery fix; no consumer remains). No offsets/SHIFT/DELTA/MM/
   PHYS_LOAD change; `src/fops.c` production logic untouched (repair order
   verified by source reading — no adjustment needed).
 
 Isolation proof (other 29 targets byte-identical behavior):
 
-- Gate code is wrapped in `#if defined(APP_FOPS_PREFLIP_GATE) &&
-  APP_FOPS_PREFLIP_GATE`; only e1q defines it. The `#else` leg is the
+- Gate code was wrapped in `#if defined(APP_FOPS_PREFLIP_GATE) &&
+  APP_FOPS_PREFLIP_GATE`; only e1q defined it (HISTORICAL — gate reverted in
+  `19418fc`, macro removed). The `#else` leg is the
   original single-shot loop verbatim.
 - `make TARGET=e1q-S9210ZHU6EZIF release` → exit 0, 104128 B; gate strings
   present in the `.so` (`pre-flip gate` ×5).
@@ -1122,8 +1134,8 @@ Isolation proof (other 29 targets byte-identical behavior):
   (`-DAPP_PAYLOAD=1 -E`) `run_exploit` tail still expands to
   `start_p0_ref_keeper(); for (int attempt = 1; attempt <= 1; ...)`,
   zero `gate_attempt` references. `-Wall -Wextra` clean on both.
-- No exploit run, no feed/KSU touched, nothing committed (working tree
-  only).
+- No exploit run, no feed/KSU touched at §9.10 time (working tree only;
+  retry-lottery §9.15 + candidate artifacts `58a6772` came later).
 
 ### 9.11 Pre-flip gate build — first hardware run on boot `55936f1a` (2026-11-03): 0 HIT, 24/24 clean exit, NO panic
 
@@ -1158,7 +1170,7 @@ survival vs four blind-flip panics on the ungated build); fail-open leg
 withheld the flip correctly, but why-zero (wrong source page vs wrong
 read offset/len) is a parent-session decision.
 
-### 9.12 Whole-table pre-flip gate (gate v2) on boot `55936f1a` (2026-11-03): 0 HIT, 120/120 zero-byte reads — 原語 pre-trigger 失效
+### 9.12 Whole-table pre-flip gate (gate v2) on boot `55936f1a` (2026-11-03): 0 HIT, 120/120 zero-byte reads — pre-trigger primitive dead
 
 Follow-up to §9.11, same boot `55936f1a` (no reboot in between), single round,
 no second exploit. Mother-session hypothesis: the post-flip audit
@@ -1198,7 +1210,7 @@ primitive (window/pos computation). Gate v2 tests exactly that, zero risk
   absent, pushed hashes identical. 24 reparented nanosleep orphans killed
   (0 remain, same client-timeout phenomenon as §9.11).
 
-Status: **整表讀仍 0 位元組 — 「原語 pre-trigger 失效」** (whole-table
+Status: **whole-table reads still 0 bytes — pre-trigger primitive dead** (whole-table
 pre-trigger reads EOF exactly like single-slot reads; blob window/pos is not
 length-sensitive here). No further length variants per protocol. Fail-closed
 leg re-proven (two consecutive gated runs, zero panics, vs four blind-flip
@@ -1212,8 +1224,8 @@ Parent task: move the gate from pre-trigger to post-trigger pre-flip —
 after `app_trigger_fops_slide_route()` returns, before the misc_fops global
 write (flip), with the flip write point asserted to be inside
 `try_cfi_stage` (`src/fops.c`). Verdict: **the asserted flip write point
-does not exist; clean insertion is structurally impossible. No code
-changed, nothing committed.**
+does not exist; clean insertion is structurally impossible. At §9.13 time no code was
+changed (retry-lottery §9.15 came later).**
 
 Flip-point hunt (exhaustive, `APP_PHYS_P0_ORACLE=1` build = EZIF release):
 
@@ -1276,7 +1288,7 @@ the target actually walks (`#else` single-shot hardcodes `<= 1`,
 (3) reboot → repush → reverify hashes pre-fire; (4) single boot single
 round; (5) raw log archived with SHA (per §9.11/§9.12 precedent).
 
-### 9.14 Ungated tuned build (`efc8b49c`) full-chain on boot `55936f1a` (2026-11-03) — PANIC attempt 1/24, NEW CFI lseek signature #134
+### 9.14 Ungated tuned build (`efc8b49c`) full-chain on boot `55936f1a` (2026-11-03) — PANIC at attempt 1/24 (attempt index, NOT a rate), NEW CFI lseek signature #134
 
 Same boot `55936f1a` as §9.11/§9.12 (no reboot in between), single round,
 no second exploit. This round fired the §9.9 NanoTurtle-tuned build WITHOUT
@@ -1313,7 +1325,7 @@ Full local record: `/mnt/240G_SSD/opencode_tmp/s3_lottery2/`
 - Verification items (a)–(e) unrunnable (no root session); Manager
   skipped per protocol.
 
-Boot对照 (this round):
+Boot comparison (this round):
 
 | Field | Before (exploit boot) | After |
 | --- | --- | --- |
@@ -1335,32 +1347,20 @@ planted value (repair runs only post-flip inside `try_cfi_stage`), so CFI
 killed it (`expected type 0xe61887de` vs planted gadget). The llseek slot
 is flip-racy by construction — planted gadget first, repaired later —
 and any trigger path that issues `lseek` between flip and repair dies
-exactly this way. Parent-session decision how to close it; no source
-changed here, nothing committed.
+exactly this way. Parent-session decision how to close it; at §9.14 time no source
+was changed (retry-lottery §9.15 came later).
 
-Scoreboard (all EZIF hardware rounds to date): **1/6** — one full-chain
+Scoreboard (adb manual route, FROZEN at §9.14 — superseded by combined 2/7 in §9.16): **1/6** — one full-chain
 root + KSU v3.3.1 live (boot `8ae3860a` run 1, §9.6); five panics: run-2
 `misc_open`/`try_module_get` (post-load, same-boot re-invoke, §9.6),
 #131 + #132 PI `refcount_warn_saturate ← rt_mutex_adjust_prio_chain`
 (pre-root, §9.7/§9.8), #133 CFI `__arm64_sys_ioctl` (post-PI, pre-root,
 §9.9), #134 CFI `__arm64_sys_lseek` (pre-root, this section).
 
-#### 9.14-supplement: run record (concise) — same round as above, PANIC pre-root, NEW CFI/lseek signature
+#### 9.14.1 Addendum — same round, key extra signals (merged to avoid duplication; run detail above is authoritative)
 
-Single boot, single round, no second exploit. HEAD `19418fc` build as given
-(`efc8b49c…`, 104128 B, gate strings ×0) + `c49a6557…` root helper + v3.3.1
-ksud `fde99b5a…`, pushed as `lotto2_*` (sizes/ELF/md5 verified pre-fire),
-`.ksud-stage` + `ksud-s25u-kdp` preset. Idle gate: boot `55936f1a`, up
-~3 h, load ~1.6–2.0, `boot_completed=1`, no `kernelsu`, `Enforcing`.
-Full record: `/mnt/240G_SSD/opencode_tmp/s3_lottery2/verdict.md` + durable
-`lotto2_boot55936f1a.log` (4760 B, SHA-256 `63cd2904…`).
-
-- Run (ONE invocation, `ATTEMPTS=24`, TIMEOUT 300/180,
-  `STACK_WRITER_DELAY_USEC=125000`): attempt **1/24**, slide `0x170000`
-  (quorum `best=00170000 hits=17`, unanimous; same per-boot value as the
-  §9.11/§9.12 gate runs — 5th distinct per-boot slide, stable within boot),
-  `fops-page-held` → pi stages → `writer-enter` → transport died
-  (RUNNER_EXIT=255). No root, no late-load.
+Single boot, single round, no second exploit (same round as §9.14 — setup not repeated here).
+Extra signals beyond the run record above:
 - Panic `#134` (`dumpstate_lastkmsg_134_20261103_030839_KP.log.gz`, 642053 B,
   + same-bytes latest, SHA-256 `109b485d…`): `Oops - CFI` at
   `__arm64_sys_lseek+0xb4/0xcc`, task `cve43499-run:16226`, KTIME 10762.32,
@@ -1374,10 +1374,10 @@ Full record: `/mnt/240G_SSD/opencode_tmp/s3_lottery2/verdict.md` + durable
   Shell-side only: `Enforcing` throughout, driver absent. Manager skipped
   per protocol (only v3.3.0 apk on hand, version-mismatch + UI needed).
 
-Status: chain root still ONLY from boot `8ae3860a` run 1 — now **1 root vs
+Status: chain root at §9.14 time still ONLY from boot `8ae3860a` run 1 — **1 root vs
 5 fops-stage panics** (run-2 post-load misc, #131/#132 PI, #133 ioctl-CFI,
 #134 lseek-CFI). Control-channel/`su`/Manager/resetprop/repeatability
-still TODO. Nothing committed.
+still TODO at that point (see §9.16 for what §9.16 closed).
 
 ### 9.15 Single-shot-path retry lottery (static only, no device run)
 
@@ -1388,14 +1388,14 @@ does not define `APP_REQUIRE_FRESH_P0_SESSION`, so the fresh retry loop
 (`src/main.c:594-683`) is compiled out and production walks the `#else`
 single-shot path (`attempt<=1`). NanoTurtle's same-core measurement says a
 real ×5 is worth 67%. This section puts the ×5 budget on the path EZIF
-actually walks. No exploit run, nothing committed.
+actually walks. At §9.15 time no exploit run was performed (static only).
 
 - Scope (hard constraint): `src/main.c` `#else` region only + one macro
   `#define APP_FOPS_SINGLE_PATH_RETRY 1` in
   `src/targets/e1q-S9210ZHU6EZIF/target.h`. No offsets/SHIFT/DELTA/MM/
   PHYS_LOAD change; `src/fops.c`/`src/slide_app.c`/`src/pipe.c` untouched.
-  (`APP_FOPS_PREFLIP_GATE` stays defined but gates nothing — retired with
-  the reverted gate, kept for record.)
+  (`APP_FOPS_PREFLIP_GATE` was retired with the reverted gate and is NOT
+  defined anymore — see `target.h` historical note.)
 - Design: the `#else` block is now `#if
   defined(APP_FOPS_SINGLE_PATH_RETRY) && APP_FOPS_SINGLE_PATH_RETRY` /
   retry loop / `#else` verbatim single shot / `#endif`. Loop bound reuses
@@ -1418,8 +1418,11 @@ actually walks. No exploit run, nothing committed.
   `/home/samson1357924/Android/Sdk/ndk/29.0.14206865`, `make release`
   exit 0 both, `-Wall -Wextra` clean both):
   e1q **104128 B**, SHA-256
-  `7b68f38d9c3836c83cfc5af3af454036fe6d3f5f455c504df5670c44c22e30cb`
-  (retires §9.12 gate-v2 `e25561fc…`); e3q-S9280ZCS6DZF2 control
+  `74496f5ba4d49e79106fe4c1fe1c9778ff96b50ccbf647ae1c0d3226e2f93a8b`
+  (retires §9.12 gate-v2 `e25561fc…`; supersedes review-fix predecessor
+  `7b68f38d…` — only change is the §9.15→review log-wording fix
+  `releasing reclaim state` → `retrying with fresh FOPS page` + removal of
+  the dead `APP_FOPS_PREFLIP_GATE` define, no logic change); e3q-S9280ZCS6DZF2 control
   **104128 B**, SHA-256
   `955d79d75bd72816245595dcb14f7a829f6b5598f1fe5ef4b5b00e348ee8a3f2`
   (**byte-identical to the §9.13 baseline — zero behavior change**).
@@ -1441,7 +1444,7 @@ checklist addition: after any macro/budget change, `-E`-expand the
 target's actual config and grep the production path for the bound before
 claiming the budget exists.
 
-### 9.16 App 端到端 root 成功（S24 0.3.4-s24.1，boot `de00aae0`）
+### 9.16 App end-to-end root success (S24 0.3.4-s24.1, boot `de00aae0`)
 
 Second independent EZIF root, via a different route on a different
 machine: the user ran the S24 App (v0.3.4-s24.1 / versionCode 18, with
@@ -1451,7 +1454,8 @@ forensics ONLY (38 logs + `SHA256SUMS.txt` + `verdict.md`, all under
 `/mnt/240G_SSD/opencode_tmp/ezif_approot_20261103/`, `sha256sum -c`
 clean): no exploit run, no reboot, no repo change, no commit. Per the
 build record the App's built-in assets correspond to source commit
-`58a6772` (= this branch HEAD); the APK payload bytes themselves were
+`58a6772` (= pre-review-fix HEAD; repo `.so` has since been rebuilt to
+`74496f5b…` by a log-wording-only review fix — same logic, see §9.15); the APK payload bytes themselves were
 not extracted over adb, so that correspondence is recorded as stated,
 not device-re-verified.
 
@@ -1501,14 +1505,15 @@ Notes and caveats (recorded honestly, not smoothed over):
   `*version*` files; `d01`/`d02` `SecurityException: … user 150`
   header with complete listings.
 
-Relation to run 1 and scoreboard (one defined口径):
+Relation to run 1 and scoreboard (one defined scoring definition):
 
 - Run 1 (§9.6, boot `8ae3860a`) = adb full chain with a manually
-  pushed repo `.so` (`9c6cf160…`) + staged ksud: first independent
+  pushed repo `.so` (`9c6cf160…` at that time) + staged ksud: first independent
   root. This App run (boot `de00aae0`) = full chain with the App's
-  built-in assets (`7b68f38d…` 104128 B exploit + `fde99b5a…` ksud,
+  built-in assets (`7b68f38d…` 104128 B exploit — pre-review-fix equivalent
+  of current `74496f5b…`, log-wording only — + `fde99b5a…` ksud,
   source commit `58a6772`): second independent root.
-- Scoreboard口径 (frozen): the denominator counts EZIF hardware rounds
+- Scoreboard definition (frozen): the denominator counts EZIF hardware rounds
   with a decisive outcome (granted root OR panic); fail-closed clean
   aborts (§9.11/§9.12, 0 flips / 0 panics) do not score. adb manual
   route stays **1/6** (1 root + 5 panics: run-2 post-load misc,

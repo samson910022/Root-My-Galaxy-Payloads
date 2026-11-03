@@ -107,15 +107,14 @@
  * path where the x5 budget above is dead code (attempt<=1). Define this to
  * replay clean misses (verified=0, no dirty) with a fresh FOPS page, bound
  * by APP_FOPS_FRESH_PAGE_ATTEMPTS. ONLY this target defines it; every other
- * target keeps the verbatim single shot. (APP_FOPS_PREFLIP_GATE below is the
- * retired pre-trigger-gate flag, kept for record; it gates nothing now.) */
+ * target keeps the verbatim single shot. Historical note: APP_FOPS_PREFLIP_GATE
+ * was the retired pre-trigger-gate flag (reverted in 19418fc after the
+ * pre-trigger read primitive proved dead, §9.12-§9.13); it gates nothing and
+ * is intentionally NOT defined anymore. */
 #define APP_FOPS_SINGLE_PATH_RETRY 1
-/* Pre-flip gate (forensic S6 §2): verify the sprayed fake_fops table is
- * really resident BEFORE the flip (genuine-fd readback of the planted
- * ioctl slot; 5 misses -> clean exit with no flip). Macro-gated: ONLY this
- * target defines it; every other target takes the legacy single-shot path
- * in main.c untouched. */
-#define APP_FOPS_PREFLIP_GATE 1
+/* Pre-flip gate was retired (see above): no APP_FOPS_PREFLIP_GATE define.
+ * Post-trigger verification already exists as audit_fake_fops_table
+ * (src/fops.c), so no gate macro is needed here. */
 #define SLIDE_KSNITCH_APPENDED_FUTEXES 2048
 #define SLIDE_KSNITCH_REPEAT_MEASUREMENT 64
 #define SLIDE_KSNITCH_AVERAGE 8

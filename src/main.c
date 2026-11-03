@@ -719,8 +719,8 @@ int run_exploit(int argc, char **argv) {
     if (verified || cfi_dirty_seen) {
       break;
     }
-    pr_info("app fops clean miss; releasing reclaim state before fresh "
-            "page attempt=%d/%d\n",
+    pr_info("app fops clean miss; retrying with fresh FOPS page "
+            "attempt=%d/%d\n",
             attempt, fops_single_attempts);
   }
 #else
