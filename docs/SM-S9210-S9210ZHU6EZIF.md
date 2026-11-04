@@ -1473,9 +1473,10 @@ clean): no exploit run, no reboot, no repo change, no commit. Per the
 build record the App's built-in assets correspond to source commit
 `58a6772` (= pre-review-fix HEAD; repo `.so` has since moved `74496f5b…`
 (§9.15, log-wording-only review fix) → HEAD `efc8b49c…` (commit `a687ea9`,
-retry disabled by default — see §9.17); exploit logic unchanged); the APK payload bytes themselves were
-not extracted over adb, so that correspondence is recorded as stated,
-not device-re-verified.
+retry disabled by default — see §9.17); exploit logic unchanged); the APK payload bytes were
+device-pull verified 2026-11-04 (base.apk `53775826` B,
+`1f6f990bfb521387bf31bed84fb794b95d9ced14d8d839c2285da48be4562bc8`,
+adb-pull and scp-landed copies byte-identical — see table).
 
 Key values (all device-measured 2026-11-02T21:45–21:46Z; device local
 2026-11-03 05:45–05:46, UTC+8):
@@ -1504,20 +1505,24 @@ Notes and caveats (recorded honestly, not smoothed over):
   NOT byte-identical to the repo-built v3.3.1 ksud `5065680 B`
   (`fde99b5a…`, §9.4). The version string still reports `3.3.1
   (uapi: 5)`, so the version finding stands while the size delta
-  (different strip/compress pipeline in the App asset build) is noted
+  (App built-in asset now proven == repo, so the delta arose at/after
+  install — recorded as an install-time processing product, no specific
+  cause asserted) is noted
   for the record (`c06_data_adb_list.log`, `8962a5be…`).
 
   KSU ksud three-way correspondence (2026-11-04 docs cross-check — no new device run):
 
   | ksud source | Size | SHA-256 / digest | Provenance |
   | --- | --- | --- | --- |
-  | App built-in (S24 0.3.4-s24.1 asset) | — (bytes never pulled over adb) | **not extracted** (APK `1f6f990b…` per Stage-1 record, not re-verified by this worker) — pending | stated per build record (source commit `58a6772`), not device-re-verified |
-  | On-device `/data/adb/ksud` (boot `de00aae0`) | 4990848 B | **not extracted** | device-measured 2026-11-03 05:39 (`c06_data_adb_list.log`, `8962a5be…`) |
+  | App built-in (S24 0.3.4-s24.1 asset) | 5065680 B | `fde99b5a129e5714fe6f598cf8276c76d2cbaf1a7f4e6ce9ae69d5ebca0abe61` — **MATCH repo** (size + SHA double MATCH) | device-pull verified 2026-11-04: base.apk 53775826 B `1f6f990bfb521387bf31bed84fb794b95d9ced14d8d839c2285da48be4562bc8` adb-pull/scp two-end identical (t03/t04), asset via `unzip -p` pipe + `unzip -l` size cross-check (t05/t06) |
+  | On-device `/data/adb/ksud` (boot `de00aae0`) | 4990848 B | `4f7d5fd65631915ea579ff406bd9cbe58217f2c91dac6527f5b2f28ad4508171` — **MISMATCH vs repo** (−74832 B, SHA differs) | device-measured 2026-11-03 05:39 (`c06_data_adb_list.log`, `8962a5be…`); SHA re-verified 2026-11-04 via root `sha256sum` (t01) |
   | Repo release `kernelsu/ksud-e1q-S9210ZHU6EZIF-kdp` | 5065680 B | `fde99b5a129e5714fe6f598cf8276c76d2cbaf1a7f4e6ce9ae69d5ebca0abe61` (measured 2026-11-04, matches §9.4) | built §9.1–§9.4, published in `58a6772` |
 
-  Conclusion: the version string (`ksud 3.3.1 (uapi: 5)`) agrees across all
-  three, but equal version ≠ same binary — until the two missing digests are
-  completed, do NOT claim an exact-pair.
+  Conclusion: App built-in == repo proven (5065680 B + SHA-256 double
+  MATCH). On-device `/data/adb/ksud` differs from repo (4990848 B,
+  different SHA; version string `ksud 3.3.1 (uapi: 5)` agrees but equal
+  version ≠ same binary — no exact-pair; may be an install-time
+  processing product, no specific cause asserted).
 - `lastkmsg` slots 132–136 exist (latest
   `136_20261103_040451_KP.log.gz`, 700214 B); NOT pulled, timestamps
   only (`f02_dumpstate_lastkmsg.log`, `2e2ec42a…`). This boot started
@@ -1596,8 +1601,8 @@ change at §9.17 time.
 - Status declaration: the HEAD retry branch is **UNVERIFIED and DISABLED by
   default**. Both counted roots predate it — run 1 (§9.6) used the
   then-current `9c6cf160…` repo `.so`, and the App run (§9.16) used
-  `7b68f38d…`-era built-in assets (recorded as stated in §9.16, not
-  device-re-verified). Run 1 did not trigger the retry loop — its §9.6
+  `7b68f38d…`-era built-in assets (device-pull verified in §9.16:
+  base.apk 53775826 B two-end identical, asset `7b68f38d…` 104128 B). Run 1 did not trigger the retry loop — its §9.6
   transcript shows first-try success (`exploit completed attempt=1/24`).
   The App run's built-in `.so` is RETRY=1 compiled in (the `58a6772` blob
   measures retry present, `clean miss` ×1) but has no attempt-level
