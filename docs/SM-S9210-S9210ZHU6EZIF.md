@@ -1609,10 +1609,13 @@ change at §9.17 time.
   transcript, so whether retry fired is unknown. Neither run therefore
   validates HEAD (`a687ea9` / `efc8b49c…`, retry disabled by default). Scoreboard
   stays **2/7** (frozen definition, §9.16 — no new success claimed here).
-- HEAD binding verification: **PENDING** (exact SHA `efc8b49c…` + HEAD
-  `a687ea9` + on-device test + post-failure state review). Requires explicit
-  authorization for the next on-device run; do NOT infer HEAD behavior from
-  the §9.6/§9.16 runs.
+- HEAD binding verification: **TESTED in §9.18** (was PENDING at §9.17
+  time; now closed as a 0/1 fail-closed data point, not a success — see
+  §9.18). Exact SHA `efc8b49c…` + HEAD `a687ea9` (+ docs-only successors
+  `d62aefd`/`2c624b2`, artifact bytes unchanged) + on-device test on boot
+  `608f9edb` + post-failure state review. Do NOT infer HEAD rootability
+  from the §9.6/§9.16 runs; §9.18 neither proves nor disproves it
+  (single ticket + PI panic first).
 
 #### 9.17.1 Reboot-persistence check (boot `de00aae0` → `2f39dbe6`, 2026-11-04, read-only, no success claimed)
 
@@ -1633,3 +1636,95 @@ Evidence: `/mnt/240G_SSD/opencode_tmp/reboot_nopersist_20261104/reboot_persist_c
 expected** (LKM RAM-only); persistence-matrix cell CLOSED; scoreboard stays
 **2/7** (no new success claimed); device alive — current boot is usable for a
 follow-up HEAD-bound run, which still requires explicit authorization.
+
+### 9.18 HEAD-bound single-shot run on boot `608f9edb` (2026-11-04) — PANIC #138 pre-root, HEAD 0/1
+
+Single boot, single round, no second exploit (panic protocol: stop, pull,
+no re-fire). First and only on-device firing of the HEAD-bound artifact
+(`efc8b49c…`, RETRY=0 single-shot). **NO ROOT — no new success claimed.**
+Full worker record (take precedence on detail):
+`/mnt/240G_SSD/opencode_tmp/headv_608f9edb/verdict.md`
+(SHA-256 `2620db26749c…`).
+
+- Idle gate (same boot, pre-fire, `prefire_gate.log`): boot
+  `608f9edb-4c8d-497a-ad91-5f32da5185a3`, uptime `724 s` (>600 ✓), load
+  `1.98` (<3 ✓), `boot_completed=1`, `getenforce Enforcing`, no
+  `kernelsu` (`/proc/modules` count 0, dmesg count 0), `which su` empty.
+- HEAD binding (device-side pre-fire re-verified, all match —
+  `local_sha.txt` vs `ondevice_verify.log`, ELF magic `7f 45 4c 46`):
+
+  | File (`/data/local/tmp/headv_*`) | Bytes | SHA-256 (device = local) |
+  | --- | --- | --- |
+  | `headv_app.release.so` ← `artifacts/e1q-S9210ZHU6EZIF/cve-2026-43499-app.so` (HEAD `2c624b2`; bytes from `a687ea9`, unchanged) | 104128 | `efc8b49caa9129539645689479eaa55b7aa0059e621997beee375a8a1a86a538` ✓ |
+  | `headv_root` ← `build/e1q-S9210ZHU6EZIF/cve-2026-43499-root` | 27264 | `c49a655708bed646441f6a7d848c5a400e6fb444f7fcf05fcb0704e547ddcd55` ✓ |
+  | `headv_ksud-331` ← `kernelsu/ksud-e1q-S9210ZHU6EZIF-kdp` (staged, never consumed) | 5065680 | `fde99b5a129e5714fe6f598cf8276c76d2cbaf1a7f4e6ce9ae69d5ebca0abe61` ✓ |
+  | `.ksud-stage` + `ksud-s25u-kdp` (`cp` preset, same hash) | 5065680 | `fde99b5a…` ✓ |
+
+  Shell-side: `headv_ksud-331 --version` = `ksud 3.3.1 (uapi: 5)` (driver
+  not live, version string only).
+- Run (ONE invocation, `ATTEMPTS=24`,
+  `EXPLOIT_ATTEMPT_TIMEOUT_SEC=300`, `P0_ATTEMPT_TIMEOUT_SEC=180`,
+  `STACK_WRITER_DELAY_USEC=125000`, fired 2026-11-04T10:33:37Z via
+  `headv_root --run-payload`): attempt **1/24** (attempt index within this
+  single round, NOT a rate), pid 19009, `slide-kaslr-ok source=tracefs
+  base=ffffffc008170000 slide=0x170000` (quorum `best=00170000 hits=14
+  second=0`, unanimous; 5th distinct per-boot unanimous slide after
+  `0x90000`/`0x140000`/`0x50000`/`0x180000`, volatility as expected).
+  PI stages all passed
+  (`owner-target-locked` → `deadlock-accepted` → `wait-timeout-accepted` →
+  `writer-enter`, `configured_delay=125000 consume_delay=125000`
+  confirmed), then live transport died at `writer-enter`. Durable
+  `headv.log` (4325 B, SHA `f0ac96f4…`, pulled post-reboot as
+  `headv_from_device.log`, byte-consistent with the live prefix
+  `headv_live.log` 5363 B) stops at `fops-page-held` — same log-gap
+  pattern as §9.7/§9.8/§9.9. No `exploit completed`, no root umh, no
+  late-load.
+- Panic **#138** (`lastkmsg138_KP.log.gz`, 637823 B, SHA-256
+  `3f63d81dc9cc…`; `lastkmsg_latest.log.gz` same bytes; unpacked
+  `lastkmsg138.txt` 2097731 B): **pre-load, pre-root PI `refcount`
+  family — same family as #131/#132 (§9.7/§9.8)**:
+  `WARNING: CPU: 1 PID: 28852 at lib/refcount.c:25
+  refcount_warn_saturate` ← `rt_mutex_adjust_prio_chain` ←
+  `rt_mutex_adjust_pi` ← `__sched_setscheduler` ←
+  `__arm64_sys_sched_setattr` → `Internal error: Oops: 96000005` NULL
+  deref at `0x18`, task `cve43499-run:28852`, CPU 1, KTIME **753.63**
+  (≈ fire-boot uptime 724 s + ~30 s run, self-consistent). Full dump
+  `kernelsu` string count **0** → KSU never loaded. Device self-rebooted
+  to `6e1b4735-25bf-4d5e-8afc-91f7fda0fe45`
+  (`ro.boot.bootreason=reboot`, `boot_completed=1`, `Enforcing`, driver
+  absent, volatile as expected).
+- Slot hygiene: `#137_20261104_182139` timestamps to the fire boot's own
+  start (~18:21 local), i.e. a prior-boot leftover — NOT pulled, NOT
+  attributed here. Only the post-fire #138 pair was pulled.
+- Verification items (a)–(e) unrunnable without a root session (same
+  disposition as §9.7–§9.9/§9.14): `su -c id`, root-side getenforce,
+  `ksud --version`/late-load/`/proc/modules` Live line/su-context dmesg,
+  Manager package/dumpsys — none executable. Shell-side facts only:
+  Enforcing throughout, driver absent.
+- Storage face: the three pushed round files are **all absent**
+  post-panic (`No such file`) — the §9.9 tuned125 face, NOT the §9.8
+  retry2 zero-fill face. The fsync'd durable `headv.log` survived. Rule
+  unchanged: **after ANY panic-reboot, re-push + re-verify before any
+  reuse**.
+- HEAD binding conclusion: HEAD (`efc8b49c…` + `a687ea9` source,
+  artifact bytes unchanged through `2c624b2`) is now **on-device tested:
+  0/1** (single-shot, attempt-1 pre-root PI panic). This neither proves
+  HEAD rootable nor disproves it (single lottery ticket + panic arrived
+  first). §9.17 PENDING is hereby closed as tested (see §9.17 bullet).
+
+Scoreboard (definition unchanged from §9.16, extended by one counted
+round): the denominator counts EZIF hardware rounds with a decisive
+outcome (granted root OR panic); fail-closed clean aborts (§9.11/§9.12,
+0 flips / 0 panics) do NOT score. Combined **2/8** = adb manual **1/6**
+(FROZEN: 1 root on boot `8ae3860a` run 1, §9.6 + 5 panics: run-2
+post-load misc §9.6, #131 §9.7, #132 §9.8, #133 §9.9, #134 §9.14) +
+App **1/1** (boot `de00aae0`, §9.16) + HEAD **0/1** (boot `608f9edb`
+panic #138, this section). Fail-closed §9.11/§9.12 rounds remain
+outside the denominator.
+
+User-reported note (user-reported, NO transcript — NOT counted):
+the user states the last App success took seven rounds ("七輪" verbatim)
+before succeeding. Round/attempt semantics are unclear (App attempts vs
+user-visible rounds), so NO claim is made about which attempt succeeded.
+Recorded only as compatible with the App built-in RETRY=1 (retry did
+fire); it changes nothing above and adds nothing to the denominator.
