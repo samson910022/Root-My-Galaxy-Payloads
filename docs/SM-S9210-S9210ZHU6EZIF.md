@@ -2296,3 +2296,46 @@ manual 1/6 + App 1/1 + HEAD panics #138 §9.18 + #139 §9.21 + #140
 §9.22 #140 + §9.23 #141 + this clean-miss) — neither proves nor
 disproves HEAD rootable (single ticket + trigger-stage miss at
 `status=256 ok=0`).
+
+### 9.25 三路唯讀調查結論匯總（2026-11-04；唯讀轉述，不改 code、不改計分、無新增成功宣稱）
+
+三路唯讀調查已完成，原報告在母會話中、未落檔。本節僅把結論如實記入，
+不新增成功宣稱、不改計分（combined 仍為 **2/11**，定義見 §9.16/§9.18–§9.24）、
+不改 code。細節以各 cited 節為準；本節為索引性匯總。
+
+#### 9.25.1 路徑差異：App vs adb 手動（出處：跨倉引用 S24 倉，完整路徑+行號見下）
+
+App 側 120/45/40000 出處（S24 倉實測 `grep -n`，跨倉引用，本倉未收錄該檔）：`/home/samson1357924/projects/Root-My-Galaxy-S24/app/src/main/java/dev/samson/s24root/InstallViewModel.kt:550`（`EXPLOIT_ATTEMPTS="24"`）、`:551`（`P0_ATTEMPT_TIMEOUT_SEC="45"`）、`:552`（`EXPLOIT_ATTEMPT_TIMEOUT_SEC="120"`）、`:590`（`STACK_WRITER_DELAY_USEC="40000"`）；用量 `:250-253`／`:445-450`；觸發 `ShizukuController.exec` 定義見 `/home/samson1357924/projects/Root-My-Galaxy-S24/app/src/main/java/dev/samson/s24root/ShizukuController.kt:68`，調用見 `InstallViewModel.kt:237-239`。
+
+| 差異軸 | App 路線 | adb 手動路線 | 結論 |
+| --- | --- | --- | --- |
+| `EXPLOIT_ATTEMPTS` | 24 | 24 | 同為 24，與成敗無關 |
+| 超時 `EXPLOIT_ATTEMPT_TIMEOUT_SEC` / `P0_ATTEMPT_TIMEOUT_SEC` | 120 / 45 | 300 / 180 | 數值不同，可能有影響，未定量 |
+| `STACK_WRITER_DELAY_USEC` | 40000（40ms） | 125000（125ms） | 最大嫌疑；App 的 40ms 只在 DZG1 驗證過，EZIF 上無量測 |
+| 內層重試票數 | App 內建 RETRY=1（×5） | HEAD RETRY=0（單發） | App 有內層重試預算，HEAD 為單票；重試是否開火在 App 成功輪無 attempt 級 transcript，未知（§9.16–§9.17 同理） |
+| 觸發向量 | Shizuku-LD_PRELOAD（`sh -c true` 同 session） | `--run-payload`（setsid 斷線免疫） | 向量不同，影響未量化 |
+| 提權身份側 | Shizuku 側倉內無精確出處 | adb shell（uid 2000） | 身份側未知，不斷言 |
+
+#### 9.25.2 數據結論
+
+- 兩次成功（§9.6 run 1、§9.16 App 輪）的共同點：run1 首發（attempt=1/24，§9.6）；App 是否首發未知（無 transcript，§9.17）、
+  均為 KSU 3.3.1、開火時 `boot_completed=1`。
+- 失敗三家族 + clean-miss 兩形：PI `refcount` 家族（#131/#132/#138/#139/#141）、
+  CFI 家族（#133 ioctl、#134 lseek）、BRK 家族（#140 `queued_spin_lock_slowpath`
+  BRK 變體）；clean-miss 兩形為 trigger 階段 `status=256 ok=0`（§9.20/§9.24）
+  與 CFI 後 physrw miss（§9.19）。
+- 負載假說評估：用戶「等高負載過去再打」實踐既非必要（App 成功時
+  load 7–15，未等待）亦非充分（panic 輪多在低負載 settle 後開火），
+  因果層面 insufficient（N=2、無對照）。如實記錄，措辭尊重：該實踐仍是
+  合理的衛生習慣，但現有數據不支持因果結論。
+
+#### 9.25.3 假說 H1–H10 與修法 R0–R6 登記（狀態一律：需上機驗證、現不改）
+
+母會話原報告中的 H1–H10（假說）與 R0–R6（修法）具體表述未落檔，
+此處僅登記編號與狀態，不重寫語義、不改 code：
+
+- H1–H10：均為待驗假說，狀態一律「需上機驗證、現不改」。
+  具體標題與一句話以母會話原報告為準，本文檔不代述。
+- R0–R6：均為候選修法，狀態一律「需上機驗證、現不改」。
+  R0–R6 細節見調查會話紀錄（未落檔），此處僅登記狀態。
+- 本節寫入本身不構成任何修法的授權或實施；S6 gate 與計分定義不變。
