@@ -1613,3 +1613,23 @@ change at §9.17 time.
   `a687ea9` + on-device test + post-failure state review). Requires explicit
   authorization for the next on-device run; do NOT infer HEAD behavior from
   the §9.6/§9.16 runs.
+
+#### 9.17.1 Reboot-persistence check (boot `de00aae0` → `2f39dbe6`, 2026-11-04, read-only, no success claimed)
+
+| Item | Value |
+| --- | --- |
+| New boot_id | `2f39dbe6-446b-4928-a9af-79cd4895174d` (prior boot `de00aae0`, the App-root success boot, §9.16) |
+| Uptime | ~263 s |
+| PDA | `S9210ZHU6EZIF` |
+| Kernel | `6.1.162-android14-11-34343818-abS9210ZHU6EZIF` (unchanged) |
+| Boot state | `boot_completed=1`, `bootreason=reboot,shell` |
+| `su` | absent (`/system/bin/sh: su: inaccessible or not found`) |
+| `getenforce` | `Enforcing` |
+| `/proc/modules` | no `kernelsu` (grep count 0) → root gone |
+| `dumpstate_lastkmsg_*` | still only #132–#136 (latest `136_040451`), no new entry → clean reboot |
+
+Evidence: `/mnt/240G_SSD/opencode_tmp/reboot_nopersist_20261104/reboot_persist_check.log`
+(SHA `80fd18e2…`). Conclusion: root is **non-persistent across reboot as
+expected** (LKM RAM-only); persistence-matrix cell CLOSED; scoreboard stays
+**2/7** (no new success claimed); device alive — current boot is usable for a
+follow-up HEAD-bound run, which still requires explicit authorization.
