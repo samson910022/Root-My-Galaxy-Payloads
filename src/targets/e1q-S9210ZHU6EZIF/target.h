@@ -102,16 +102,22 @@
  * 6.1.162 measured: 125ms delay + fresh-page x5 = 67%; 50ms too narrow,
  * 300ms panics. Timing knob only — geometry/offsets untouched. */
 #define APP_FOPS_FRESH_PAGE_ATTEMPTS 5
-/* Single-shot-path lottery (main.c #else): this target does NOT define
- * APP_REQUIRE_FRESH_P0_SESSION, so production walks the #else single-shot
- * path where the x5 budget above is dead code (attempt<=1). Define this to
- * replay clean misses (verified=0, no dirty) with a fresh FOPS page, bound
- * by APP_FOPS_FRESH_PAGE_ATTEMPTS. ONLY this target defines it; every other
- * target keeps the verbatim single shot. Historical note: APP_FOPS_PREFLIP_GATE
- * was the retired pre-trigger-gate flag (reverted in 19418fc after the
- * pre-trigger read primitive proved dead, §9.12-§9.13); it gates nothing and
- * is intentionally NOT defined anymore. */
-#define APP_FOPS_SINGLE_PATH_RETRY 1
+/* Single-shot-path retry (main.c #if APP_FOPS_SINGLE_PATH_RETRY): DISABLED
+ * (0) per PR #10 review P1. A clean miss (verified=0, no dirty) is NOT
+ * proof the kernel is clean: the flip may already have happened inside
+ * the trigger (§9.13), and cfi_dirty_seen is only the CFI-scratch sticky
+ * flag (src/fops.c:451), not fops-recovery evidence, so replaying with a
+ * fresh FOPS page is not fail-closed. This target therefore stays single
+ * shot until a safe-exit condition has independent evidence. The retry
+ * loop in main.c is retained but compiled out by this 0. Re-enable
+ * condition: fail-closed evidence for clean-miss retry plus HEAD-bound
+ * verification; only then may this return to 1. ONLY this target ever
+ * defined it; every other target keeps the verbatim single shot.
+ * Historical note: APP_FOPS_PREFLIP_GATE was the retired pre-trigger-gate
+ * flag (reverted in 19418fc after the pre-trigger read primitive proved
+ * dead, §9.12-§9.13); it gates nothing and is intentionally NOT defined
+ * anymore. */
+#define APP_FOPS_SINGLE_PATH_RETRY 0
 /* Pre-flip gate was retired (see above): no APP_FOPS_PREFLIP_GATE define.
  * Post-trigger verification already exists as audit_fake_fops_table
  * (src/fops.c), so no gate macro is needed here. */

