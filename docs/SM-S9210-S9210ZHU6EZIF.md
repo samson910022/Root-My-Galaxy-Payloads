@@ -2339,3 +2339,126 @@ App 側 120/45/40000 出處（S24 倉實測 `grep -n`，跨倉引用，本倉未
 - R0–R6：均為候選修法，狀態一律「需上機驗證、現不改」。
   R0–R6 細節見調查會話紀錄（未落檔），此處僅登記狀態。
 - 本節寫入本身不構成任何修法的授權或實施；S6 gate 與計分定義不變。
+
+### 9.26 實驗 App-equivalent 配置首票 ROOT（boot `e9ce6299`，2026-11-04）—— temp-root-only，combined 3/12
+
+Single boot, single round, no second exploit. STOP per protocol
+(no re-fire, no late-load). **ROOT — no new HEAD claim.**
+Full worker record (takes precedence on detail):
+`/mnt/240G_SSD/opencode_tmp/req1_e9ce6299/verdict.md`
+(`sha256sum -c SHA256SUMS.txt` **8/8 OK**; durable
+`req1_from_device.log` `aa6bc3b9…` 97 lines vs live de-headed 99 lines,
+content consistent).
+
+- Settle gate (same boot, pre-fire; m-series per `verdict.md:41-42`,
+  fire-time sample per `prefire_gate.log:6-7`): fresh `adb
+  reboot` off `feb83aac`, boot `e9ce6299-a1d2-4f76-9a9c-3c6df35344e7`;
+  1 min load `m1 27.92 → m2 40.98 → m6 4.41 → m7 3.10` **PASS**
+  (fire 2026-11-04T14:50:10Z, fire-time load 2.33 — `prefire_gate.log`
+  僅此單筆即時值，無 m-series); `boot_completed=1`;
+  pre-fire `Enforcing`, no `kernelsu` (`/proc/modules` count 0), no
+  `su` (`which su` rc=1).
+- Experiment binary (NOT in repo; HEAD stays `bdfe377`, no commit):
+  worktree-only one-word `APP_FOPS_SINGLE_PATH_RETRY 0→1`
+  (`exp_retry1.diff` archived, `SHA256SUMS.txt` OK, worktree already
+  `git checkout --` restored to `0`; post-round `git status
+  --porcelain` empty). NDK r29 build, pushed three files device
+  re-verified all equal:
+
+  | File (`/data/local/tmp/req1_*`) | Bytes | SHA-256 (device = local) |
+  | --- | --- | --- |
+  | `req1_app.release.so` (experiment RETRY=1) | 104128 | `cf46748632265dc6716a77be79e28c662011a1b8cbe3e731327af41106cd1c3f` ✓ |
+  | `req1_root` (`c49a6557…` helper) | 27264 | `c49a655708bed646441f6a7d848c5a400e6fb444f7fcf05fcb0704e547ddcd55` ✓ |
+  | `req1_ksud-331` (`fde99b5a…`, staged, never consumed) | 5065680 | `fde99b5a129e5714fe6f598cf8276c76d2cbaf1a7f4e6ce9ae69d5ebca0abe61` ✓ |
+- Run (ONE invocation, App-equivalent
+  `EXPLOIT_ATTEMPTS=24 EXPLOIT_ATTEMPT_TIMEOUT_SEC=120
+  P0_ATTEMPT_TIMEOUT_SEC=45 STACK_WRITER_DELAY_USEC=40000`,
+  FIRE_RC=0): `exploit completed attempt=1/24`, `uid=2000->0`;
+  **first ticket hit** — inner single-path `attempt=1/5 triggered=1
+  verified=1 step=0 errno=0`, no `retrying with fresh FOPS page`, no
+  `final clean miss` (retry budget never used a 2nd ticket).
+- Key values (all device-measured): slide `0x70000`
+  (`slide-kaslr-ok source=tracefs base=ffffffc008070000
+  slide=0x70000 data_mode=canonical`; quorum `best=00070000 hits=11
+  second=0 slots=1`, caller gate `candidate=00070000`) — **new
+  distinct per-boot value**; R0 first data
+  `base=ffffff802a8b0000` (`mm leaked=ffffff802a8b4000
+  base=ffffff802a8b0000 object_index=16`; `kernel page prepare …
+  base=ffffff802a8b0000`; `app fops slide … base=ffffff802a8b0000`);
+  `configured_delay=40000 consume_delay=40000`
+  (`pselect … elapsed_usec=500182`); `p0 status=0 ok=1`; root umh
+  `wake=1 complete=1 retval=0 socket=1`, `selinux left=0 … old=1`,
+  `pipe physrw … root=1 kaslr=1 read_ok=1 write_ok=1 rw64=1/1`.
+- End state: **temp-root-only** (in-process, NOT late-loaded):
+  `su` N/A (`which su` rc=1, no root channel — consistent with §9.6
+  first half); shell-side `Permissive` (pre-fire `Enforcing` — exploit
+  selinux effect globally residual); shell-side
+  `/data/local/tmp/req1_ksud-331 --version` = `ksud 3.3.1 (uapi: 5)`
+  (version string only, driver not live); `/proc/modules` no
+  `kernelsu`, dmesg kernelsu count 0; Manager 狀態 log 含混
+  (`postroot_verify.log` §6 僅兩行裸 `versionName`、無 package 歸屬，
+  未跑 absence 查詢，不斷言 absent); on-device App `dev.samson.s24root`
+  `0.3.4-s24.1`; `Working` UI needs a user screenshot (not done this
+  round).
+- Confound honesty note: this round changed **three axes at once** —
+  RETRY (`0→1`) + delay (`125ms→40ms`) + timeouts
+  (`300/180→120/45`) — and hit on the first ticket. Therefore
+  **H1 (ticket budget) and H6 (delay) are NOT separately verified**:
+  record only "App-equivalent config succeeds as a whole", make NO
+  single-factor claim.
+
+Scoreboard (definition unchanged from §9.16/§9.18–§9.24: the
+denominator counts decisive rounds only — granted root OR panic;
+fail-closed clean aborts do NOT score): this round is a **decisive
+ROOT**, so combined moves **2/11 → 3/12** = adb manual **1/6** (§9.6
+run 1 + 5 panics) + App **1/1** (§9.16) + HEAD **0/7** (§9.18–§9.24:
+§9.19/§9.20/§9.24 clean-miss + #138/#139/#140/#141 panics) +
+**experiment App-equivalent 1/1** (this section, RETRY=1
+`cf467486…` on boot `e9ce6299`). The experiment line is listed
+separately and is NOT mixed into HEAD 0/7 — **HEAD main line stays
+0/7** (this round is an experimental branch config, not HEAD).
+
+#### 9.26.1 Late-load 全鏈（同 boot `e9ce6299`，同會話；§9.26 計分已含，本節不重複計）
+
+Same boot, same session, zero exploit re-runs, zero reboots (boot_id
+`e9ce6299-a1d2-4f76-9a9c-3c6df35344e7` unchanged throughout,
+`05_verify.log:22`). Helper root channel survived from the §9.26
+temp-root (`ezif_root -c id` → `uid=0(root) … u:r:kernel:s0`,
+`Permissive`; `01_prestate.log:7-9`). Single `--late-load` only —
+§9.6 panic戒律遵守（KSU-live 後絕不二次觸發；驗證只用 su/唯讀查詢）。
+Full worker record (takes precedence on detail):
+`/mnt/240G_SSD/opencode_tmp/req1_ksuload/verdict.md` + `logs/01`–`06`.
+
+- 程序與 §9.6 零偏離：`.ksud-stage` 事前已存在且雜湊正確仍按 §9.6
+  重做 `cp` 再調用（`02_stage.log`）；`--ephemeral` 被拒為 usage
+  error → `module not live; retrying plain late-load`（與 §9.6 run1
+  逐字相同；`03_lateload.log`）；`.ksud-stage` 載入後被 rename
+  消耗（與 §9.6 機制一致——機制一致推論：logs/01–04 無載入後
+  `.ksud-stage` 直接 `ls` 證據）。
+- Key values（皆 device-measured）：
+
+  | Item | Value | Evidence |
+  | --- | --- | --- |
+  | `/proc/modules` | `kernelsu 237568 2 - Live 0x… (O)` | `04_poststate.log:2`, `05_verify.log:10` |
+  | SELinux | 載入前 `Permissive` → 載入後 `Enforcing`（對照 ✓） | `01:6,9` → `04:1`, `05:8` |
+  | `su -c id` | `uid=0(root) … u:r:ksu:s0`，rc=0（§9.6 run1 未能驗的項，本次 CLOSED） | `05_verify.log:1-3` |
+  | ksud via su | `ksud 3.3.1 (uapi: 5)`，`/data/adb/ksu/bin/ksud` | `06_su_verify.log:4-6,40-42` |
+  | `ksud debug version`（control channel） | `Kernel Version: 32680`（§9.6 TODO，本次 CLOSED；首次 `debug get-version` 失敗見 `06:32-36`，換子命令後得值） | `06_su_verify.log:32-43` |
+  | dmesg via su | `welcome to KernelSU version 32680` + Samsung KDP 行 + `su->ksud` 授權行，共 184 行 | `06_su_verify.log:7-15,17,44-52` |
+  | ksud 五方雜湊一致 | repo / `ksud-s25u-kdp` / `.ksud-stage` / `ezif_ksud-331` / 事後 `/data/adb/ksud` 皆 `fde99b5a…`（5065680 B，`/data/adb/ksud` mtime 2026-11-04 22:53 本次寫入） | `01_prestate.log:13-17`, `06_su_verify.log:18-30` |
+  | Manager | `me.weishu.kernelsu`，`versionName=v3.3.1`，`versionCode=32680`（與 §9.4 配對一致） | `05_verify.log:16-20` |
+  | dmesg as shell | 拒絕（rc=1，預期；已改用 su 通道補驗） | `05_verify.log:14-15` |
+
+- §9.6 blocker 再現但無影響：載入後 `temp_su.sock` shell 側
+  `Permission denied`（`04_poststate.log:5`；helper 通道事後
+  `su: connect daemon: Permission denied` rc=127，
+  `05_verify.log:4-6`）——但本次 KSU su 已正常接管（`su -c id`
+  rc=0，context `u:r:ksu:s0`），§9.6 run1 被 blocker 擋下的
+  su/control-channel 項全部 CLOSED。
+- 結論：實驗 App-equivalent 配置完成「temp-root → KSU Live」
+  完整全鏈（第三次獨立完整 root；與 run1 同構）——§9.26 的
+  temp-root 加本節的 late-load 構成同一 boot 上的同一 decisive
+  ROOT，不新增 denominator/numerator。計分維持 **3/12**（已在
+  §9.26 計入，不重複計）。
+- 如實註明：Manager `Working <LKM>` UI 仍待用戶截圖（本節只驗到
+  package `versionName`/`versionCode`，UI 未驗）。
