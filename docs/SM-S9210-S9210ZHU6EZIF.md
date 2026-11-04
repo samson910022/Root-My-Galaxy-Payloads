@@ -1662,6 +1662,13 @@ Full worker record (take precedence on detail):
 
   Shell-side: `headv_ksud-331 --version` = `ksud 3.3.1 (uapi: 5)` (driver
   not live, version string only).
+  Correction note (2026-11-04, docs-only — no source/artifact change):
+  the authoritative `headv_root` SHA-256 tail is `…ddcd55`
+  (`c49a655708bed646441f6a7d848c5a400e6fb444f7fcf05fcb0704e547ddcd55`,
+  three-way consistent across `headv_608f9edb/local_sha.txt`, device-side
+  pre-fire re-verification, and post-run state). The scratch worker record
+  `headv_608f9edb/verdict.md:24` prints tail `…6562d63` — worker typo, not
+  a different binary.
 - Run (ONE invocation, `ATTEMPTS=24`,
   `EXPLOIT_ATTEMPT_TIMEOUT_SEC=300`, `P0_ATTEMPT_TIMEOUT_SEC=180`,
   `STACK_WRITER_DELAY_USEC=125000`, fired 2026-11-04T10:33:37Z via
@@ -1728,3 +1735,81 @@ before succeeding. Round/attempt semantics are unclear (App attempts vs
 user-visible rounds), so NO claim is made about which attempt succeeded.
 Recorded only as compatible with the App built-in RETRY=1 (retry did
 fire); it changes nothing above and adds nothing to the denominator.
+
+### 9.19 HEAD single-shot clean-miss on boot `6e1b4735` (2026-11-04) — fail-closed, HEAD 0/2
+
+Single boot, single round, no second exploit (clean-miss protocol:
+record, stop, no re-fire). Second on-device firing of the HEAD-bound
+artifact (`efc8b49c…`, RETRY=0 single-shot), on the self-rebooted boot
+after the §9.18 panic #138. **NO ROOT — no new success claimed.** Full
+worker record (takes precedence on detail):
+`/mnt/240G_SSD/opencode_tmp/headv2_6e1b4735/verdict.md`
+(SHA-256 `a6ba56659b2a42a4824c6dc53caa5df4898777762e3e5217f9ea68fd66d035aa`;
+`sha256sum -c SHA256SUMS.txt` clean on all 8 files in that directory).
+
+- Settle gate (same boot, pre-fire, `prefire_gate.log` + `verdict.md` §0):
+  boot `6e1b4735-25bf-4d5e-8afc-91f7fda0fe45` (post-#138 self-reboot,
+  matches task assignment), uptime ~19–20 min, `boot_completed=1`, 1 min
+  loadavg `1.91`→`1.65` (<4 ✓, two pre-fire measures; 5/15 min values still
+  settling but the gate looks at 1 min only — pass per task definition),
+  `bootreason=reboot`, PDA `S9210ZHU6EZIF`, kernel
+  `6.1.162-android14-11-34343818-abS9210ZHU6EZIF`, `Enforcing` throughout
+  pre-fire. No `kernelsu` (`/proc/modules` count 0), no `su`. Firing
+  followed user practice (unlock, then wait for the high-load window to
+  pass before firing) — recorded as user practice, consistent with the
+  firing condition.
+- HEAD binding (device-side pre-fire re-verified, all match —
+  `local_sha.txt` vs `prefire_gate.log` device hashes, ELF magic
+  `7f 45 4c 46`):
+
+  | File (`/data/local/tmp/headv2_*`) | Bytes | SHA-256 (device = local) |
+  | --- | --- | --- |
+  | `headv2_app.release.so` ← `artifacts/e1q-S9210ZHU6EZIF/cve-2026-43499-app.so` (HEAD `716fa5c`; bytes from `a687ea9`, unchanged) | 104128 | `efc8b49caa9129539645689479eaa55b7aa0059e621997beee375a8a1a86a538` ✓ |
+  | `headv2_root` ← `build/e1q-S9210ZHU6EZIF/cve-2026-43499-root` | 27264 | `c49a655708bed646441f6a7d848c5a400e6fb444f7fcf05fcb0704e547ddcd55` ✓ |
+  | `headv2_ksud-331` ← `kernelsu/ksud-e1q-S9210ZHU6EZIF-kdp` (staged, never consumed) | 5065680 | `fde99b5a129e5714fe6f598cf8276c76d2cbaf1a7f4e6ce9ae69d5ebca0abe61` ✓ |
+  | `.ksud-stage` + `ksud-s25u-kdp` (`cp` preset, same hash) | 5065680 | `fde99b5a…` ✓ |
+
+  Shell-side: `headv2_ksud-331 --version` = `ksud 3.3.1 (uapi: 5)`
+  (driver not live, version string only). Stale §9.18 `headv.log` (4325 B,
+  `f0ac96f4…`) still present pre-fire, consistent with the §9.18 record;
+  stale `ksud-s25u-kdp` still `fde99b5a…` (overwritten by the fresh preset).
+- Run (ONE invocation, `ATTEMPTS=24`,
+  `EXPLOIT_ATTEMPT_TIMEOUT_SEC=300`, `P0_ATTEMPT_TIMEOUT_SEC=180`,
+  `STACK_WRITER_DELAY_USEC=125000`, fired 2026-11-04T10:54:47Z;
+  `fire_time_utc.txt` 10:54:44Z is the pre-fire second-level timestamp):
+  production attempt **1/1** (`stack writer ran; refusing retry on this
+  boot`, RETRY=0 effective — runner configured `attempts=24` but executed
+  a single production attempt, then runner exit `0xff00`=255 → FIRE_RC=255,
+  ~11 s return), pid 19856, `slide-kaslr-ok source=tracefs
+  base=ffffffc008190000 slide=0x190000` (quorum `best=00190000 hits=16
+  second=0 slots=1`, unanimous; 6th distinct per-boot unanimous slide after
+  `0x90000`/`0x140000`/`0x50000`/`0x180000`/`0x170000`, volatility as
+  expected). PI stages all passed (`owner-target-locked` →
+  `owner-chain-lock-enter` → `cmp-enter/return(-1/35)` →
+  `deadlock-accepted` → `wait-timeout-accepted` → `writer-enter`,
+  `pselect ret=6 elapsed_usec=500576` → `writer-return sched_ok=1`) →
+  `trigger-return triggered=1` → CFI (fake fops span `owner=0`,
+  `llseek` still the planted value, scratch write `ret=35 errno=0` / read
+  `ret=35 errno=0`, `restoring misc_fops → ffffffc009572e30`) → pipe physrw
+  `probe found=0 pipebuf=0 idx=-1 scan=0/0/0` → `attempt=1/1 triggered=1
+  verified=0 step=8 errno=34`. No `exploit completed`, no root umh, no
+  late-load (ksud staged, never consumed; `.ksud-stage` untouched).
+- Post-run (SAME boot `6e1b4735`, no reboot, no panic —
+  `postrun_state.log`): `boot_completed=1`, `Enforcing`, kernelsu count 0,
+  dmesg kernelsu 0, nanosleep orphans 0; all pushed files
+  (`.so`/root/ksud) + `.ksud-stage` + `ksud-s25u-kdp` hashes identical to
+  pre-fire. Durable `headv2.log` (7399 B, `6ccacedb…`, byte-consistent with
+  the live prefix `headv2_live.log` 7520 B, `5ef4f07b…`).
+- Verification items (a)–(e) unrunnable without a root session (same
+  disposition as §9.7–§9.9/§9.14/§9.18): `su -c id`, root-side getenforce,
+  `ksud --version`/late-load/`/proc/modules` Live line/su-context dmesg,
+  Manager package/dumpsys — none executable. Shell-side facts only:
+  Enforcing throughout, driver absent.
+
+Scoreboard (definition unchanged from §9.16/§9.18: the denominator counts
+decisive rounds only — granted root OR panic; fail-closed clean aborts do
+NOT score): this round is a **fail-closed clean miss**, outside the
+denominator. Combined stays **2/8** (adb manual 1/6 + App 1/1 + HEAD 0/1
+§9.18). HEAD binding cumulative **0/2** (§9.18 panic #138 + this
+clean-miss) — neither proves nor disproves HEAD rootable (single ticket +
+post-trigger physrw miss).
