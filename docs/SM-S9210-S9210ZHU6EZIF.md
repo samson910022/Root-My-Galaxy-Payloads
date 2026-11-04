@@ -10,7 +10,7 @@ Reference structure: [`SM-S9210-S9210ZHS6DZG1.md`](SM-S9210-S9210ZHS6DZG1.md).
 Procedure: [`PORTING.md`](PORTING.md).
 Feed rules: [`../README.md`](../README.md) + [`../support/README.md`](../support/README.md).
 
-## 1. Firmware identity (S1 proven 2026-11-02; offsets/KSU/validation still TODO)
+## 1. Firmware identity (S1 proven 2026-11-02; offsets static-done §7–§8.6, KSU static-done/HW-partial §9, validation partial 2/7 §9.16)
 
 | Field | Value (S0) |
 | --- | --- |
@@ -101,7 +101,7 @@ DZG1 reference: [`SM-S9210-S9210ZHS6DZG1.md`](SM-S9210-S9210ZHS6DZG1.md)
 | P0 table (`p0_fingerprint.h`, `P0_ORACLE_PROBE_OFFSET`, `P0_PHYS_OFFSET`, `P0_KERNEL_PHYS_LOAD`) | `0x1f0000` probe, `0x80000000` / `0x80080000`, 42 address words differ from S9280 | S2 regenerated from EZIF raw kernel: all 32 slides × 8 qwords + 256-qword readback verified (`p0_fingerprint.h` committed). `P0_PHYS_OFFSET = 0x80000000` DTB-proven (EZIF vendor_boot DTB `gunyah_hyp_region@80000000`, reg base `0x80000000`); `P0_KERNEL_PHYS_LOAD = 0x80080000` = memstart + ARM64 TEXT_OFFSET with same-board (SM-S9210/pineapple) hardware precedent — `TODO(validation)` linear-map self-consistency on EZIF hardware | Reuse across firmware is explicitly unsafe (cf. DZG1 §P0) |
 | Slide params (`SLIDE_TRACEFS_EVENT_ID`, `WORKER_CALLER_OFF`, `PSELECT_WORD_SHIFT`, bank geometry, `SKB_DATA_DELTA`, `TASK_STRIDE`, `LOCK_OFF`) | `106` / `0xdb1a0` / `3`, e1s-style geometry, `-0xe80`, `0x1c0`/`0x5200`, default 15 slabs | Event ID `106` + caller `0x000db39c` derived from EZIF ELF (see §7; numeral 106 is recomputed, not copied). `SLIDE_PSELECT_WORD_SHIFT` + `SKB_DATA_DELTA` stay `TODO(offsets)` — hardware-tuned per firmware (see §7); bank/slab geometry keeps the invariant cross-target structure, re-validation on hardware still `TODO(validation)` | DZG1 values are hints for bring-up order only, never defaults |
 | KernelSU pair | v3.2.5 feed pair + v3.3.0 Phase-D candidate (one 2026-10-03 success) | v3.3.1 primary + v3.3.0 fallback — static build + audit DONE §9 (vermagic exact, 0 missing/0 CRC); hardware pairing PARTIAL (§9.16) | Do NOT copy DZG1 `.ko`/`ksud` |
-| Hardware validation | Device-tested 2026-09-11 (v3.2.5), candidate 2026-10-03 (v3.3.0) | `TODO(validation)` — no runs yet | S0 performs zero runs |
+| Hardware validation | Device-tested 2026-09-11 (v3.2.5), candidate 2026-10-03 (v3.3.0) | hardware rounds recorded §9.6–§9.16 (combined 2/7); full matrix still `TODO(validation)` | S0 performs zero runs |
 
 ## 3. Stage plan S0–S6 and acceptance checklists
 
@@ -145,7 +145,7 @@ Numbering follows `PORTING.md` §1–§9. S0 is this file only.
   passes (release NOT run).
 - [x] **S3 — physical load + slide params (PORTING.md §4–§5). STATIC DONE + ON-DEVICE TUNED (§8.6: SHIFT=3/DELTA=-0xe80 HIT; MM 0x400 slabinfo-observed):** sboot
   `text_offset+0x80000000` derivation with file offset + disassembly (no S25U
-  copy); `P0_PHYS_OFFSET` / `P0_KERNEL_PHYS_LOAD` proven; tracefs event ID from
+  copy); `P0_PHYS_OFFSET` / `P0_KERNEL_PHYS_LOAD`: tracefs/canonical full chain has on-device root success (§9.6/§9.16); Physical-P0 fallback / `0x80080000` independent cross-validation still open; tracefs event ID from
   device `id` file or `(__event - __start)/8 + __TRACE_LAST_TYPE` math;
   `worker_thread` post-`bl schedule` caller derivation; per-boot caller-minus-offset
   64-KiB-alignment + P0-range verification; `SLIDE_PSELECT_WORD_SHIFT` from
@@ -626,8 +626,8 @@ Verification (no `probe_mm.sh` exists in this repo — equivalent checks):
   **104128 bytes** (Makefile fixed-size padding satisfied, no
   over-limit error), SHA-256
   `9c6cf160b7b24eaa021d163c514c342ca4a4f850faa32ca30a61fb5a33593a51`
-  (HISTORICAL §8.6 build — RETIRED by §9.15 `74496f5b…` (review-fix; predecessor `7b68f38d…`); current
-  `artifacts/` holds the latter, see §9.15),
+  (HISTORICAL §8.6 build — RETIRED by §9.15 `74496f5b…` (review-fix; predecessor `7b68f38d…`);
+  `artifacts/` now holds HEAD `efc8b49c…` (commit `a687ea9`, retry disabled by default — see §9.17)),
   `ELF 64-bit LSB shared object, ARM aarch64, for Android 35, NDK
   r29, stripped`.
 
@@ -1274,10 +1274,24 @@ Baseline rebuild (no source change; NDK r29
 `/home/samson1357924/Android/Sdk/ndk/29.0.14206865`, `make release`
 exit 0 both): e1q `104128 B`, SHA-256
 `e25561fc85b1021bffecbe424da2168976cd8c47814fcf3867f80760ddf5d720`
-(= §9.12 gate-v2 artifact, `pre-flip gate` strings ×5); e3q control
+(= §9.12 gate-v2 artifact, `pre-flip gate` strings ×5); e3q-S9280ZCS6DZF2 control
 `104128 B`, SHA-256
-`955d79d75bd72816245595dcb14f7a829f6b5598f1fe5ef4b5b00e348ee8a3f2`,
+`e9baa068843b372cf5d1a7131902f58af25931327957df7b39df3b655e89c9bc`
+(measured 2026-11-04 from `artifacts/e3q-S9280ZCS6DZF2/cve-2026-43499-app.so`;
+the previously recorded `955d79d7…` matches no on-disk artifact — see correction note below),
 `pre-flip gate` strings ×0 (isolation intact, 29 targets untouched).
+
+Correction note (2026-11-04, docs-only fix — no source/artifact change):
+the `955d79d7…` value previously recorded here and in §9.15 matches NONE
+of the three committed e3q artifacts (all `104128 B`, git-clean since
+September). Measured `sha256sum artifacts/e3q-*/cve-2026-43499-app.so`:
+`e3q-S9280ZCS6DZF2` =
+`e9baa068843b372cf5d1a7131902f58af25931327957df7b39df3b655e89c9bc`;
+`e3q-S928BXXS6DZF2` =
+`a49b378d654c7e637697a701c3c4c5fd02d22b9b30a7069c03e64ec5844af206`;
+`e3q-S928USQS6DZF2` =
+`b2931d8980f969b5a0cb05bd67f6804f445ad4a4c867a7b4c4081c2ffac5b36a`.
+`955d79d7…` is retired as a stale record; the per-variant values above are authoritative.
 
 Lessons converged (for any future gate work): (1) S2 structural diffs must
 be followed by a probe proving the new macro actually takes effect in the
@@ -1391,7 +1405,8 @@ real ×5 is worth 67%. This section puts the ×5 budget on the path EZIF
 actually walks. At §9.15 time no exploit run was performed (static only).
 
 - Scope (hard constraint): `src/main.c` `#else` region only + one macro
-  `#define APP_FOPS_SINGLE_PATH_RETRY 1` in
+  `#define APP_FOPS_SINGLE_PATH_RETRY 1` (`1` is the §9.15-time value;
+  HEAD default is `0` since commit `a687ea9` — see §9.17) in
   `src/targets/e1q-S9210ZHU6EZIF/target.h`. No offsets/SHIFT/DELTA/MM/
   PHYS_LOAD change; `src/fops.c`/`src/slide_app.c`/`src/pipe.c` untouched.
   (`APP_FOPS_PREFLIP_GATE` was retired with the reverted gate and is NOT
@@ -1422,10 +1437,12 @@ actually walks. At §9.15 time no exploit run was performed (static only).
   (retires §9.12 gate-v2 `e25561fc…`; supersedes review-fix predecessor
   `7b68f38d…` — only change is the §9.15→review log-wording fix
   `releasing reclaim state` → `retrying with fresh FOPS page` + removal of
-  the dead `APP_FOPS_PREFLIP_GATE` define, no logic change); e3q-S9280ZCS6DZF2 control
+  the dead `APP_FOPS_PREFLIP_GATE` define, no logic change; itself superseded
+  by the §9.17 HEAD build `efc8b49c…` — retry now disabled by default); e3q-S9280ZCS6DZF2 control
   **104128 B**, SHA-256
-  `955d79d75bd72816245595dcb14f7a829f6b5598f1fe5ef4b5b00e348ee8a3f2`
-  (**byte-identical to the §9.13 baseline — zero behavior change**).
+  `e9baa068843b372cf5d1a7131902f58af25931327957df7b39df3b655e89c9bc`
+  (measured value — the `955d79d7…` recorded at §9.15 time matches no on-disk
+  artifact, see correction note in §9.13; **behavior unchanged vs the §9.13 baseline**).
   `strings`: e1q `clean miss` ×1 / `fresh page unavailable` ×1 /
   `attempt=%d/%d`; e3q `clean miss` ×0 / `attempt=%d/1`. Preprocessed
   (`-DAPP_PAYLOAD=1 -E`): e1q expands to `const int
@@ -1454,8 +1471,9 @@ forensics ONLY (38 logs + `SHA256SUMS.txt` + `verdict.md`, all under
 `/mnt/240G_SSD/opencode_tmp/ezif_approot_20261103/`, `sha256sum -c`
 clean): no exploit run, no reboot, no repo change, no commit. Per the
 build record the App's built-in assets correspond to source commit
-`58a6772` (= pre-review-fix HEAD; repo `.so` has since been rebuilt to
-`74496f5b…` by a log-wording-only review fix — same logic, see §9.15); the APK payload bytes themselves were
+`58a6772` (= pre-review-fix HEAD; repo `.so` has since moved `74496f5b…`
+(§9.15, log-wording-only review fix) → HEAD `efc8b49c…` (commit `a687ea9`,
+retry disabled by default — see §9.17); exploit logic unchanged); the APK payload bytes themselves were
 not extracted over adb, so that correspondence is recorded as stated,
 not device-re-verified.
 
@@ -1488,6 +1506,18 @@ Notes and caveats (recorded honestly, not smoothed over):
   (uapi: 5)`, so the version finding stands while the size delta
   (different strip/compress pipeline in the App asset build) is noted
   for the record (`c06_data_adb_list.log`, `8962a5be…`).
+
+  KSU ksud three-way correspondence (2026-11-04 docs cross-check — no new device run):
+
+  | ksud source | Size | SHA-256 / digest | Provenance |
+  | --- | --- | --- | --- |
+  | App built-in (S24 0.3.4-s24.1 asset) | — (bytes never pulled over adb) | **not extracted** (APK `1f6f990b…` per Stage-1 record, not re-verified by this worker) — pending | stated per build record (source commit `58a6772`), not device-re-verified |
+  | On-device `/data/adb/ksud` (boot `de00aae0`) | 4990848 B | **not extracted** | device-measured 2026-11-03 05:39 (`c06_data_adb_list.log`, `8962a5be…`) |
+  | Repo release `kernelsu/ksud-e1q-S9210ZHU6EZIF-kdp` | 5065680 B | `fde99b5a129e5714fe6f598cf8276c76d2cbaf1a7f4e6ce9ae69d5ebca0abe61` (measured 2026-11-04, matches §9.4) | built §9.1–§9.4, published in `58a6772` |
+
+  Conclusion: the version string (`ksud 3.3.1 (uapi: 5)`) agrees across all
+  three, but equal version ≠ same binary — until the two missing digests are
+  completed, do NOT claim an exact-pair.
 - `lastkmsg` slots 132–136 exist (latest
   `136_20261103_040451_KP.log.gz`, 700214 B); NOT pulled, timestamps
   only (`f02_dumpstate_lastkmsg.log`, `2e2ec42a…`). This boot started
@@ -1511,7 +1541,8 @@ Relation to run 1 and scoreboard (one defined scoring definition):
   pushed repo `.so` (`9c6cf160…` at that time) + staged ksud: first independent
   root. This App run (boot `de00aae0`) = full chain with the App's
   built-in assets (`7b68f38d…` 104128 B exploit — pre-review-fix equivalent
-  of current `74496f5b…`, log-wording only — + `fde99b5a…` ksud,
+  of `74496f5b…` (§9.15; HEAD is now `efc8b49c…`, retry disabled by default —
+  see §9.17), log-wording only — + `fde99b5a…` ksud,
   source commit `58a6772`): second independent root.
 - Scoreboard definition (frozen): the denominator counts EZIF hardware rounds
   with a decisive outcome (granted root OR panic); fail-closed clean
@@ -1525,3 +1556,55 @@ Relation to run 1 and scoreboard (one defined scoring definition):
   (package version proven, `Working <LKM>` UI still needs a user
   screenshot). Still TODO: `ksud debug` control-channel check,
   resetprop matrix, repeatability/reboot matrix, repo release/feed.
+
+### 9.17 Retry disabled by default + HEAD rebuild (commit `a687ea9`, static only, no device run)
+
+Stage-1 review follow-up (PR #10 P1/P3). No exploit run, no feed/KSU
+change at §9.17 time.
+
+- `APP_FOPS_SINGLE_PATH_RETRY 1→0`
+  (`src/targets/e1q-S9210ZHU6EZIF/target.h:120`, commit `a687ea9`):
+  production walks the verbatim single-shot `#else` path again until
+  clean-miss retry has fail-closed evidence. A clean miss (`verified=0`,
+  no dirty) is NOT proof the kernel is clean: the flip may already have
+  happened inside the trigger (§9.13), and `cfi_dirty_seen` is only the
+  CFI-scratch sticky flag (`src/fops.c:451`), not fops-recovery evidence —
+  so replaying with a fresh FOPS page is not fail-closed. The retry loop
+  in `src/main.c` is retained but compiled out by the `0`.
+- P3 log-precision fix (same commit, inside the compiled-out retry block):
+  the `retrying` log is guarded by `attempt<max` (final miss logs
+  distinctly), per-iteration `cfi_last_step`/`cfi_last_errno` 0/0 reset,
+  and an explicit `CFI not run` log when the trigger failed. No
+  production-path behavior change.
+- Rebuild (NDK r29
+  `/home/samson1357924/Android/Sdk/ndk/29.0.14206865`, `make release`
+  exit 0): `artifacts/e1q-S9210ZHU6EZIF/cve-2026-43499-app.so` **104128 B**
+  (fixed-size padding satisfied), SHA-256
+  `efc8b49caa9129539645689479eaa55b7aa0059e621997beee375a8a1a86a538`
+  (measured 2026-11-04 from the committed artifact; HEAD blob matches the
+  worktree file). The SHA equals the §9.9 tuned build by construction, not
+  by staleness: with RETRY=0 the compiler takes the same verbatim `#else`
+  single-shot leg as §9.9 (every `a687ea9` source delta sits in the
+  compiled-out `#if` block or in comments), and `git show --stat a687ea9`
+  confirms the artifact blob changed (`74496f5b…` → `efc8b49c…`).
+  Read-only `strings` check on the HEAD `.so`: retry-block strings
+  (`clean miss`, `retrying with fresh FOPS page`, `pre-flip gate`) ×0,
+  `attempt=%d/1` ×1 — production is single-shot.
+- e3q artifacts untouched: `git status` clean for `artifacts/e3q-*/`
+  (September bytes, all `104128 B`; per-variant SHAs corrected in §9.13,
+  `955d79d7…` retired).
+- Status declaration: the HEAD retry branch is **UNVERIFIED and DISABLED by
+  default**. Both counted roots predate it — run 1 (§9.6) used the
+  then-current `9c6cf160…` repo `.so`, and the App run (§9.16) used
+  `7b68f38d…`-era built-in assets (recorded as stated in §9.16, not
+  device-re-verified). Run 1 did not trigger the retry loop — its §9.6
+  transcript shows first-try success (`exploit completed attempt=1/24`).
+  The App run's built-in `.so` is RETRY=1 compiled in (the `58a6772` blob
+  measures retry present, `clean miss` ×1) but has no attempt-level
+  transcript, so whether retry fired is unknown. Neither run therefore
+  validates HEAD (`a687ea9` / `efc8b49c…`, retry disabled by default). Scoreboard
+  stays **2/7** (frozen definition, §9.16 — no new success claimed here).
+- HEAD binding verification: **PENDING** (exact SHA `efc8b49c…` + HEAD
+  `a687ea9` + on-device test + post-failure state review). Requires explicit
+  authorization for the next on-device run; do NOT infer HEAD behavior from
+  the §9.6/§9.16 runs.
