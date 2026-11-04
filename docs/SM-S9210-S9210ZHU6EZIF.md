@@ -1891,3 +1891,92 @@ outside the denominator. Combined stays **2/8** (adb manual 1/6 + App
 1/1 + HEAD 0/1 §9.18). HEAD binding cumulative **0/3** (§9.18 panic #138
 + §9.19 clean-miss + this clean-miss) — neither proves nor disproves
 HEAD rootable (single ticket + p0 trigger-stage miss).
+
+### 9.21 HEAD single-shot panic #139 on boot `94daa0e6` (2026-11-04) — decisive PI panic, HEAD 0/4
+
+Single boot, single round, no second exploit (panic protocol: record,
+stop, no re-fire). Fourth on-device firing of the HEAD-bound artifact
+(`efc8b49c…`, RETRY=0 single-shot). **NO ROOT — no new success claimed.**
+Full worker record (takes precedence on detail):
+`/mnt/240G_SSD/opencode_tmp/headv4_94daa0e6/verdict.md`
+(`sha256sum -c SHA256SUMS.txt` 19/19 OK).
+
+- Settle gate (same boot, pre-fire): boot
+  `94daa0e6-4d3d-49a3-81be-77ece734e860` (matches task assignment),
+  `boot_completed=1`, 1 min loadavg `46.80` → `21.03` → `10.49` →
+  `5.05` → `3.97` (gate pass ~11:14) → settle tail → pre-fire
+  `1.18` → `2.36` → `2.60` snapshot, `bootreason=reboot,shell`, PDA
+  `S9210ZHU6EZIF`, kernel
+  `6.1.162-android14-11-34343818-abS9210ZHU6EZIF`, `Enforcing`
+  throughout. No `kernelsu` (`/proc/modules` count 0, dmesg count 0),
+  no `su` (`which su` rc=1).
+- HEAD binding (device-side pre-fire re-verified, all match —
+  `local_sha.txt` vs `ondevice_verify.log`, ELF magic `7f 45 4c 46`):
+
+  | File (`/data/local/tmp/headv4_*`) | Bytes | SHA-256 (device = local) |
+  | --- | --- | --- |
+  | `headv4_app.release.so` ← `artifacts/e1q-S9210ZHU6EZIF/cve-2026-43499-app.so` (HEAD `fcd5c98`; bytes from `a687ea9`, unchanged) | 104128 | `efc8b49caa9129539645689479eaa55b7aa0059e621997beee375a8a1a86a538` ✓ |
+  | `headv4_root` ← `build/e1q-S9210ZHU6EZIF/cve-2026-43499-root` | 27264 | `c49a655708bed646441f6a7d848c5a400e6fb444f7fcf05fcb0704e547ddcd55` ✓ |
+  | `headv4_ksud-331` ← `kernelsu/ksud-e1q-S9210ZHU6EZIF-kdp` (staged, never consumed) | 5065680 | `fde99b5a129e5714fe6f598cf8276c76d2cbaf1a7f4e6ce9ae69d5ebca0abe61` ✓ |
+  | `.ksud-stage` + `ksud-s25u-kdp` (`cp` preset, same hash) | 5065680 | `fde99b5a…` ✓ |
+
+  Shell-side: `headv4_ksud-331 --version` = `ksud 3.3.1 (uapi: 5)`
+  (driver not live, version string only).
+- Run (ONE invocation, `ATTEMPTS=24`,
+  `EXPLOIT_ATTEMPT_TIMEOUT_SEC=300`, `P0_ATTEMPT_TIMEOUT_SEC=180`,
+  `STACK_WRITER_DELAY_USEC=125000`, fired 2026-11-04T11:25:18Z, ~22 s
+  return, adb exit 255 = transport death): production attempt
+  **1/24** (attempt index within this single round, NOT a rate), pid
+  15434, `slide-kaslr-ok source=tracefs base=ffffffc0081b0000
+  slide=0x1b0000` (quorum `best=001b0000 hits=13 second=0 slots=1`,
+  unanimous; 8th distinct per-boot unanimous slide after
+  `0x90000`/`0x140000`/`0x50000`/`0x180000`/`0x170000`/`0x190000`/`0x1e0000`,
+  volatility as expected). All PI stages passed
+  (`owner-target-locked` → `owner-chain-lock-enter` →
+  `cmp-enter/return(-1/35)` → `deadlock-accepted` →
+  `wait-timeout-accepted` → `writer-enter tid=26224`), then live
+  transport died at `writer-enter`. No `exploit completed`, no root
+  umh, no late-load (ksud staged, never consumed). Durable
+  `headv4_from_device.log` (4400 B) is a strict live prefix stopping
+  at `fops-page-held` — same log-gap pattern as §9.7/§9.8/§9.9/§9.18.
+- Panic **#139** (`dumpstate_lastkmsg_139_20261104_192614_KP.log.gz`,
+  616280 B = `lastkmsg_latest.log.gz` same bytes; unpacked
+  `lastkmsg139.txt` 2097731 B): **pre-load, pre-root PI `refcount`
+  family — same family as #131/#132 (§9.7/§9.8) and #138 (§9.18)**:
+  `refcount_t: addition on 0; use-after-free` →
+  `WARNING: CPU: 1 PID: 26226 at lib/refcount.c:25
+  refcount_warn_saturate` ← `rt_mutex_adjust_prio_chain` ←
+  `rt_mutex_adjust_pi` ← `__sched_setscheduler` ←
+  `__arm64_sys_sched_setattr` → `Internal error: Oops: 96000005` NULL
+  deref at `0x18`, task `cve43499-run:26226`, CPU 1, KTIME **1063.70**
+  (≈ fire-boot uptime ~18 min + ~1 min run, self-consistent). Full dump
+  `kernelsu` string count **0** → KSU never loaded. Slot hygiene: only
+  the post-fire #139 pair pulled (#137 is a prior-boot leftover, §9.18
+  already recorded — not pulled, not attributed here).
+- Post-panic: 20 min poll (`poll_start_utc.txt` 11:25:50Z) — m1–m2
+  `no devices/emulators`; from m3 (11:28:50Z) the device returned as
+  `device` (authorized) on new boot
+  `eef5cf58-71aa-4dab-a149-9302147c46e5`, stable m3–m20. **Non
+  NEED-UNLOCK** (authorized back on the wire within 20 min). New boot
+  (`postrun_state.log`, 11:47:03Z): `boot_completed=1`, `Enforcing`,
+  kernelsu count 0, dmesg kernelsu 0, nanosleep orphans 0, no `su`;
+  the three pushed round files + `.ksud-stage` + `ksud-s25u-kdp` all
+  survived the reboot with hashes identical to pre-fire (the §9.18
+  absent face vs this present face is recorded as an observed
+  variation — no mechanism asserted). Durable `headv4.log` hash
+  (`b2fa12de…`) matches the pulled value.
+- Verification items (a)–(e) unrunnable without a root session (same
+  disposition as §9.7–§9.9/§9.14/§9.18–§9.20): `su -c id`, root-side
+  getenforce, `ksud --version`/late-load/`/proc/modules` Live
+  line/su-context dmesg, Manager package/dumpsys — none executable.
+  Shell-side facts only: Enforcing throughout, driver absent.
+
+Scoreboard (definition unchanged from §9.16/§9.18–§9.20: the
+denominator counts decisive rounds only — granted root OR panic;
+fail-closed clean aborts do NOT score): this round is a **decisive
+panic**, so combined moves **2/8 → 2/9** (adb manual 1/6 + App 1/1 +
+HEAD panics #138 §9.18 + #139 this section). Fail-closed §9.11/§9.12
+and clean-miss §9.19/§9.20 rounds remain outside the denominator.
+HEAD binding cumulative **0/4** (§9.18 panic #138 + §9.19 clean-miss +
+§9.20 clean-miss + this #139 panic) — neither proves nor disproves
+HEAD rootable (single ticket + panic arrived first).
